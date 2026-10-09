@@ -64,14 +64,6 @@ class Customer < ApplicationRecord
   end
 
   def trusted_device?(ip: nil, device_token: nil)
-    # Loopback e redes locais são confiáveis por padrão em dev/lan
-    if ip.present?
-      return true if ['127.0.0.1', '::1', 'localhost'].include?(ip)
-      return true if ip.start_with?('192.168.', '10.', '172.16.', '172.17.', '172.18.', '172.19.',
-                                    '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.',
-                                    '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.')
-    end
-
     list = trusted_ips || []
 
     # 1. Verificação por token de dispositivo persistente (OWASP Session Management)
@@ -81,13 +73,6 @@ class Customer < ApplicationRecord
 
     # 2. IP exato na lista
     return true if list.include?(ip)
-
-    # 3. Tolerância a IP rotativo (modem/operadora) via sub-rede /24
-    parts = ip.split('.')
-    if parts.size == 4
-      subnet_prefix = parts[0..2].join('.')
-      return true if list.any? { |entry| entry == "subnet:#{subnet_prefix}" || entry.start_with?(subnet_prefix) }
-    end
 
     false
   end
@@ -108,12 +93,6 @@ class Customer < ApplicationRecord
     if ip.present?
       clean_ip = ip.to_s.strip
       current_ips << clean_ip unless current_ips.include?(clean_ip)
-      # Salva prefixo de sub-rede para acomodar rotação de IP no mesmo modem/provedor
-      parts = clean_ip.split('.')
-      if parts.size == 4
-        subnet_entry = "subnet:#{parts[0..2].join('.')}"
-        current_ips << subnet_entry unless current_ips.include?(subnet_entry)
-      end
     end
 
     # Mantém no máximo 30 entradas recentes

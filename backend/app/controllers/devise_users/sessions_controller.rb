@@ -36,6 +36,10 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
         return
       end
 
+      # O primeiro login confirma o dispositivo inicial; novos IPs/dispositivos
+      # só exigem OTP depois que já existe um login bem-sucedido.
+      first_successful_login = !AuditLog.where(action: 'login', user_id: user.id).exists?
+
       if is_otp_attempt
         # Usuário está enviando o código OTP → verifica
         unless user.verify_login_otp(raw_otp)
@@ -44,7 +48,8 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
         end
         # OTP correto → adiciona IP e dispositivo confiável e deixa o super continuar normalmente
         user.add_trusted_device!(ip: request.remote_ip, device_token: device_token)
-      elsif AuditLogger.new_device?(user: user, ip: request.remote_ip, user_agent: request.user_agent) &&
+      elsif !first_successful_login &&
+            AuditLogger.new_device?(user: user, ip: request.remote_ip, user_agent: request.user_agent) &&
             !user.trusted_device?(ip: request.remote_ip, device_token: device_token)
         # Novo dispositivo/IP sem OTP → exige verificação
         code = user.generate_login_otp!
