@@ -185,9 +185,17 @@ class Rack::Attack
 
   # Resposta customizada ao ser bloqueado (inclui Retry-After para bots bem comportados)
   self.throttled_responder = lambda do |env|
-    req = Rack::Request.new(env)
     match_data = env['rack.attack.match_data']
-    retry_after = match_data ? (match_data[:period]).to_s : '60'
+    # O Rack Attack 6.8 pode fornecer um Request em match_data, não um Hash.
+    # Nunca deixe o responder de rate limit gerar um 500 secundário.
+    retry_after = if match_data.respond_to?(:[])
+                    (match_data[:period] || match_data['period']).to_s
+                  elsif match_data.respond_to?(:period)
+                    match_data.period.to_s
+                  else
+                    '60'
+                  end
+    retry_after = '60' if retry_after.blank? || retry_after == '0'
 
     [ 429,  # Too Many Requests
       { 'Content-Type' => 'application/json', 'Retry-After' => retry_after },
