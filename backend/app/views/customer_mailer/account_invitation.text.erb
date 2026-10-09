@@ -1,0 +1,17 @@
+﻿Olá, <%= @customer.name %>!
+
+Você foi cadastrado em <%= @establishment.name %> para um atendimento. Para facilitar seus próximos agendamentos, criamos uma pré-conta para você.
+
+Acesse o link abaixo para ativar sua conta e gerenciar seus agendamentos pelo site:
+
+<%= ENV.fetch('FRONTEND_URL', 'http://localhost:5173') %>/empresa/<%= @slug %>/cadastro
+
+Seus dados:
+- Nome: <%= @customer.name %>
+- E-mail: <%= @customer.email %>
+- Estabelecimento: <%= @establishment.name %>
+
+Se não foi você quem solicitou, ignore este e-mail.
+
+---
+Este é um e-mail automático enviado pela plataforma EasySloting.

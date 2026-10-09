@@ -1,0 +1,12 @@
+
+one:
+  name: "Barbearia A"
+  slug: "barbearia-a"
+  email: "contato@barbeariaa.com.br"
+  active: true
+
+two:
+  name: "Salão B"
+  slug: "salao-b"
+  email: "contato@salaob.com.br"
+  active: true

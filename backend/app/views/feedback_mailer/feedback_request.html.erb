@@ -1,0 +1,193 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f8fafc;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      color: #334155;
+    }
+    .wrapper {
+      width: 100%;
+      background-color: #f8fafc;
+      padding: 40px 0;
+    }
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+      border: 1px solid #e2e8f0;
+    }
+    .header {
+      background-color: #0f172a;
+      padding: 32px;
+      text-align: center;
+    }
+    .header h1 {
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -0.025em;
+    }
+    .content {
+      padding: 40px;
+    }
+    .greeting {
+      font-size: 18px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+    .intro {
+      font-size: 16px;
+      line-height: 24px;
+      color: #475569;
+      margin-top: 0;
+      margin-bottom: 32px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 24px;
+    }
+    .badge-single {
+      background-color: #dbeafe;
+      color: #1d4ed8;
+    }
+    .badge-package {
+      background-color: #fef3c7;
+      color: #b45309;
+    }
+    .card {
+      background-color: #f1f5f9;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 24px;
+      border: 1px solid #e2e8f0;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-top: 0;
+      margin-bottom: 16px;
+      letter-spacing: 0.05em;
+    }
+    .detail-row {
+      margin-bottom: 12px;
+      font-size: 16px;
+    }
+    .detail-row:last-child {
+      margin-bottom: 0;
+    }
+    .detail-label {
+      font-weight: 600;
+      color: #475569;
+      display: inline-block;
+      min-width: 200px;
+    }
+    .detail-value {
+      color: #0f172a;
+    }
+    .feedback-btn {
+      display: inline-block;
+      background-color: #1d4ed8;
+      color: #ffffff !important;
+      text-decoration: none;
+      padding: 14px 40px;
+      border-radius: 999px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin: 16px 0;
+    }
+    .feedback-btn:hover {
+      background-color: #1e40af;
+    }
+    .stars-display {
+      text-align: center;
+      font-size: 32px;
+      color: #f59e0b;
+      margin: 20px 0;
+    }
+    .footer {
+      background-color: #f8fafc;
+      padding: 24px;
+      text-align: center;
+      font-size: 12px;
+      color: #94a3b8;
+      border-top: 1px solid #e2e8f0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <h1>EASYSLOTING</h1>
+      </div>
+      <div class="content">
+        <p class="greeting">Olá, <%= html_escape(@customer.name) %>!</p>
+        <p class="intro">Seu atendimento foi concluído com sucesso. Avalie sua experiência para nos ajudar a melhorar!</p>
+
+        <% if @is_package %>
+          <span class="badge badge-package">Pacote Mensal</span>
+        <% else %>
+          <span class="badge badge-single">Serviço Avulso</span>
+        <% end %>
+
+        <div class="card">
+          <div class="card-title">Detalhes do Atendimento</div>
+          <div class="detail-row">
+            <span class="detail-label">Serviço:</span>
+            <span class="detail-value"><%= html_escape(@service.name) %></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Profissional:</span>
+            <span class="detail-value"><%= html_escape(@employee.name) %></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Data:</span>
+            <span class="detail-value"><%= @appointment.appointment_date.strftime('%d/%m/%Y') %></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Horário:</span>
+            <span class="detail-value"><%= @appointment.start_time.respond_to?(:strftime) ? @appointment.start_time.strftime('%H:%M') : @appointment.start_time.to_s[0, 5] %></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Estabelecimento:</span>
+            <span class="detail-value"><%= html_escape(@establishment.name) %></span>
+          </div>
+        </div>
+
+        <div class="stars-display">&#9734;&#9734;&#9734;&#9734;&#9734;</div>
+
+        <div style="text-align: center;">
+          <a href="https://<%= @slug %>.easysloting.com.br/empresa/<%= @slug %>/historico" class="feedback-btn">
+            Avaliar Atendimento
+          </a>
+        </div>
+
+      </div>
+      <div class="footer">
+        <p>Este é um e-mail automático enviado pela plataforma EasySloting. Por favor, não responda diretamente a esta mensagem.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

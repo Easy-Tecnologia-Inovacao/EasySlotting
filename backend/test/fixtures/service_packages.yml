@@ -1,0 +1,21 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  establishment: one
+  user: one
+  name: MyString
+  description: MyText
+  included_items: MyText
+  duration_minutes: 1
+  price: 9.99
+  active: false
+
+two:
+  establishment: two
+  user: two
+  name: MyString
+  description: MyText
+  included_items: MyText
+  duration_minutes: 1
+  price: 9.99
+  active: false

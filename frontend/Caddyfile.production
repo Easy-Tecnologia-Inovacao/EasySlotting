@@ -1,0 +1,16 @@
+{
+  email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+  encode gzip
+  @backend path /api/* /uploads/* /up /cable /cable/*
+  handle @backend {
+    reverse_proxy web:3000
+  }
+  handle {
+    root * /srv
+    try_files {path} /index.html
+    file_server
+  }
+}

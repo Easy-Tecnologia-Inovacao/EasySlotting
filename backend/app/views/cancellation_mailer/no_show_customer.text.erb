@@ -1,0 +1,18 @@
+﻿Olá, <%= @customer.name %>!
+
+Identificamos que você não compareceu ao seu agendamento. Por isso, o agendamento foi cancelado automaticamente.
+
+DETALHES DO AGENDAMENTO
+========================
+Serviço: <%= @service.name %>
+Profissional: <%= @employee.name %>
+Data: <%= @appointment.appointment_date.strftime('%d/%m/%Y') %>
+Horário: <%= @appointment.start_time.respond_to?(:strftime) ? @appointment.start_time.strftime('%H:%M') : @appointment.start_time.to_s[0, 5] %>
+<% if @is_package %>
+Tipo: Pacote Mensal
+<% end %>
+
+IMPORTANTE: Caso precise de um novo horário, acesse a página do estabelecimento e faça um novo agendamento. Se houve algum engano, entre em contato com o estabelecimento.
+
+---
+Este é um e-mail automático enviado pela plataforma EasySloting.

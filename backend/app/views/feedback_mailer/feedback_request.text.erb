@@ -1,0 +1,25 @@
+﻿Olá, <%= @customer.name %>!
+
+Seu atendimento foi concluído com sucesso. Avalie sua experiência para nos ajudar a melhorar!
+
+<% if @is_package %>
+TIPO: Pacote Mensal
+<% else %>
+TIPO: Serviço Avulso
+<% end %>
+
+DETALHES DO ATENDIMENTO
+========================
+Serviço: <%= @service.name %>
+Profissional: <%= @employee.name %>
+Data: <%= @appointment.appointment_date.strftime('%d/%m/%Y') %>
+Horário: <%= @appointment.start_time.respond_to?(:strftime) ? @appointment.start_time.strftime('%H:%M') : @appointment.start_time.to_s[0, 5] %>
+Estabelecimento: <%= @establishment.name %>
+
+AVALIAR ATENDIMENTO
+====================
+Acesse o link abaixo para avaliar:
+https://<%= @slug %>.easysloting.com.br/empresa/<%= @slug %>/historico
+
+---
+Este é um e-mail automático enviado pela plataforma EasySloting.

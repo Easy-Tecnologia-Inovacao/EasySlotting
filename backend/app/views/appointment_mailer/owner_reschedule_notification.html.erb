@@ -1,0 +1,302 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f8fafc;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      color: #334155;
+    }
+    .wrapper {
+      width: 100%;
+      background-color: #f8fafc;
+      padding: 40px 0;
+    }
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+      border: 1px solid #e2e8f0;
+    }
+    .header {
+      background-color: #0f172a;
+      padding: 32px;
+      text-align: center;
+    }
+    .header h1 {
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -0.025em;
+    }
+    .content {
+      padding: 40px;
+    }
+    .greeting {
+      font-size: 18px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+    .intro {
+      font-size: 16px;
+      line-height: 24px;
+      color: #475569;
+      margin-top: 0;
+      margin-bottom: 32px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 24px;
+    }
+    .badge-reschedule {
+      background-color: #fef3c7;
+      color: #b45309;
+    }
+    .badge-single {
+      background-color: #dbeafe;
+      color: #1d4ed8;
+    }
+    .badge-package {
+      background-color: #fef3c7;
+      color: #b45309;
+    }
+    .card {
+      background-color: #f1f5f9;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 24px;
+      border: 1px solid #e2e8f0;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-top: 0;
+      margin-bottom: 16px;
+      letter-spacing: 0.05em;
+    }
+    .detail-row {
+      margin-bottom: 12px;
+      font-size: 16px;
+    }
+    .detail-row:last-child {
+      margin-bottom: 0;
+    }
+    .detail-label {
+      font-weight: 600;
+      color: #475569;
+      display: inline-block;
+      min-width: 200px;
+    }
+    .detail-value {
+      color: #0f172a;
+    }
+    .old-value {
+      text-decoration: line-through;
+      color: #94a3b8;
+      margin-right: 8px;
+    }
+    .new-value {
+      color: #0f172a;
+      font-weight: 600;
+    }
+    .arrow {
+      color: #94a3b8;
+      margin: 0 8px;
+    }
+    .session-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 0;
+    }
+    .session-table th {
+      text-align: left;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #64748b;
+      padding: 8px 12px;
+      border-bottom: 2px solid #e2e8f0;
+      letter-spacing: 0.05em;
+    }
+    .session-table td {
+      padding: 10px 12px;
+      font-size: 14px;
+      color: #334155;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .session-table tr:last-child td {
+      border-bottom: none;
+    }
+    .footer {
+      background-color: #f8fafc;
+      padding: 24px;
+      text-align: center;
+      font-size: 12px;
+      color: #94a3b8;
+      border-top: 1px solid #e2e8f0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <h1>EASYSLOTING</h1>
+      </div>
+      <div class="content">
+        <p class="greeting">Olá, <%= html_escape(@owner.name) %>!</p>
+        <p class="intro">Um agendamento foi reagendado no seu estabelecimento <strong><%= html_escape(@establishment.name) %></strong>. Veja abaixo as alterações:</p>
+
+        <span class="badge badge-reschedule">Reagendamento</span>
+
+        <% if @is_package %>
+          <span class="badge badge-package">Pacote Mensal — Sessão <%= @session_number %>/<%= @package&.sessions_total %></span>
+        <% else %>
+          <span class="badge badge-single">Serviço Avulso</span>
+        <% end %>
+
+        <div class="card">
+          <div class="card-title">Alterações Realizadas</div>
+          <% if @is_package && @session_number %>
+          <div class="detail-row">
+            <span class="detail-label">Sessão:</span>
+            <span class="detail-value"><span class="new-value"><%= @session_number %>/<%= @package&.sessions_total %></span></span>
+          </div>
+          <% end %>
+          <div class="detail-row">
+            <span class="detail-label">Data:</span>
+            <span class="detail-value">
+              <span class="old-value"><%= @old_date.respond_to?(:strftime) ? @old_date.strftime('%d/%m/%Y') : @old_date.to_s[0, 10].split('-').reverse.join('/') %></span>
+              <span class="arrow">→</span>
+              <span class="new-value"><%= @appointment.appointment_date.strftime('%d/%m/%Y') %></span>
+            </span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Horário:</span>
+            <span class="detail-value">
+              <span class="old-value"><%= @old_time || '—' %></span>
+              <span class="arrow">→</span>
+              <span class="new-value"><%= @appointment.start_time.respond_to?(:strftime) ? @appointment.start_time.strftime('%H:%M') : @appointment.start_time.to_s[0, 5] %></span>
+            </span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Dados do Cliente</div>
+          <div class="detail-row">
+            <span class="detail-label">Nome:</span>
+            <span class="detail-value"><%= html_escape(@customer.name) %></span>
+          </div>
+          <% if @customer.email.present? && !@customer.email.include?('@easysloting.internal') %>
+            <div class="detail-row">
+              <span class="detail-label">E-mail:</span>
+              <span class="detail-value"><%= html_escape(@customer.email) %></span>
+            </div>
+          <% end %>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Detalhes do Agendamento</div>
+          <div class="detail-row">
+            <span class="detail-label">Profissional:</span>
+            <span class="detail-value"><%= html_escape(@employee.name) %></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Serviço:</span>
+            <span class="detail-value"><%= html_escape(@service.name) %></span>
+          </div>
+
+          <% if @is_package && @package %>
+            <div class="detail-row">
+              <span class="detail-label">Pacote:</span>
+              <span class="detail-value"><%= html_escape(@package.name) %> (<%= @package.sessions_total %> sessões)</span>
+            </div>
+          <% end %>
+
+          <div class="detail-row">
+            <span class="detail-label">Tipo:</span>
+            <span class="detail-value"><%= @is_package ? 'Pacote Mensal' : 'Serviço Avulso' %></span>
+          </div>
+
+          <div class="detail-row">
+            <span class="detail-label">Duração:</span>
+            <span class="detail-value"><%= @service.duration_minutes %> minutos</span>
+          </div>
+
+          <div class="detail-row">
+            <span class="detail-label">Valor:</span>
+            <span class="detail-value">R$ <%= number_with_precision(@is_package ? @package_price : (@appointment.price_snapshot || @service.price), precision: 2, separator: ',', delimiter: '.') %></span>
+          </div>
+        </div>
+
+        <% unless @is_package %>
+        <div class="card">
+          <div class="card-title">Novo Horário do Atendimento</div>
+          <table class="session-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Horário</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><%= @appointment.appointment_date.strftime('%d/%m/%Y') %></td>
+                <td><%= @appointment.start_time.respond_to?(:strftime) ? @appointment.start_time.strftime('%H:%M') : @appointment.start_time.to_s[0, 5] %></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <% end %>
+
+        <% if @is_package && @package_appointments.present? && @package_appointments.count > 1 %>
+          <div class="card">
+            <div class="card-title">Agendamento das Sessões do Pacote</div>
+            <table class="session-table">
+              <thead>
+                <tr>
+                  <th>Sessão</th>
+                  <th>Data</th>
+                  <th>Horário</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @package_appointments.each_with_index do |appt, index| %>
+                  <tr>
+                    <td><%= index + 1 %></td>
+                    <td><%= appt.appointment_date.strftime('%d/%m/%Y') %></td>
+                    <td><%= appt.start_time.respond_to?(:strftime) ? appt.start_time.strftime('%H:%M') : appt.start_time.to_s[0, 5] %></td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% end %>
+
+        <p class="intro" style="font-size: 14px; margin-bottom: 0;">Para visualizar o financeiro e gerenciar este agendamento, acesse o seu painel de controle administrativo.</p>
+      </div>
+      <div class="footer">
+        <p>Este é um e-mail automático enviado pela plataforma EasySloting. Por favor, não responda diretamente a esta mensagem.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

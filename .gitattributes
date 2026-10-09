@@ -1,0 +1,4 @@
+*.sh text eol=lf
+compose*.yaml text eol=lf
+frontend/Caddyfile* text eol=lf
+frontend/Dockerfile* text eol=lf

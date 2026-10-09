@@ -1,0 +1,55 @@
+# Environment files: only sanitized examples belong in Git.
+.env
+.env.*
+!.env.example
+!.env.*.example
+env.txt
+
+# Local credentials and database backups.
+.aws/
+.ssh/
+*.pem
+*.p12
+*.pfx
+*.sql
+*.sql.gz
+*.dump
+*.backup
+
+# Local operating-system files.
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Private key files and local package-manager credentials.
+*.key
+*.p8
+*.jks
+*.keystore
+.npmrc
+.envrc
+
+# Generated dependencies, build output, tests and runtime files.
+node_modules/
+coverage/
+*.log
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.bak
+*.old
+/dist/
+/dist-ssr/
+/tmp/
+/log/
+/backups/
+/exports/
+
+# Local editor configuration (shared extensions may be versioned).
+.idea/
+/.vscode/*
+!/.vscode/extensions.json
+
+# Public CA certificate exported for local staging trust.
+/staging-root.crt

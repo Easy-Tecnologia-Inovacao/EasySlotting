@@ -1,0 +1,12 @@
+
+one:
+  name: "Cliente A"
+  email: "cliente@a.com"
+  password_digest: "<%= BCrypt::Password.create('Password123!@#') %>"
+  establishment: one
+
+two:
+  name: "Cliente B"
+  email: "cliente@b.com"
+  password_digest: "<%= BCrypt::Password.create('Password123!@#') %>"
+  establishment: two

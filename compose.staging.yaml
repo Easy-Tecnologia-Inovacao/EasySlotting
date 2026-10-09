@@ -1,0 +1,101 @@
+name: easyslotting-staging
+
+x-backend: &backend
+  image: easyslotting-backend:staging
+  build:
+    context: ./backend
+  env_file:
+    - ./backend/.env.staging
+  environment:
+    RAILS_ENV: production
+    BUNDLE_WITHOUT: development:test
+    DB_HOST: db
+    SMTP_ADDRESS: mailpit
+    SOLID_QUEUE_IN_PUMA: "false"
+  volumes:
+    - staging_storage:/rails/storage
+    - staging_uploads:/rails/public/uploads
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:?Pass --env-file backend/.env.staging}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Missing staging database password}
+      POSTGRES_DB: ${DB_DATABASE:?Missing staging database name}
+    volumes:
+      - staging_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1
+    ports:
+      - "127.0.0.1:8025:8025"
+    environment:
+      MP_DATABASE: /data/mailpit.db
+    volumes:
+      - staging_mail:/data
+    restart: unless-stopped
+
+  prepare:
+    <<: *backend
+    command: ["./bin/rails", "db:prepare"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    <<: *backend
+    command: ["./bin/rails", "server", "-b", "0.0.0.0", "-p", "3000"]
+    depends_on:
+      prepare:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:3000/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  worker:
+    <<: *backend
+    command: ["./bin/jobs"]
+    depends_on:
+      prepare:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.staging
+    environment:
+      STAGING_HOST: ${STAGING_HOST:-localhost}
+    ports:
+      - "${STAGING_BIND_ADDRESS:-127.0.0.1}:8443:8443"
+    volumes:
+      - staging_caddy_data:/data
+      - staging_caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  staging_db:
+  staging_storage:
+  staging_uploads:
+  staging_mail:
+  staging_caddy_data:
+  staging_caddy_config:

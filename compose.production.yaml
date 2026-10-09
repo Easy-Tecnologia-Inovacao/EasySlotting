@@ -1,0 +1,120 @@
+name: easyslotting-production
+
+x-logging: &logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-backend: &backend
+  image: easyslotting-backend:production
+  build:
+    context: ./backend
+  env_file:
+    - ./backend/.env.production
+  environment:
+    RAILS_ENV: production
+    BUNDLE_WITHOUT: development:test
+    DB_HOST: db
+    WEB_CONCURRENCY: "0"
+    RAILS_MAX_THREADS: "3"
+    DB_POOL: "5"
+    JOB_CONCURRENCY: "1"
+    JOB_THREADS: "1"
+    SOLID_QUEUE_IN_PUMA: "false"
+  volumes:
+    - production_storage:/rails/storage
+    - production_uploads:/rails/public/uploads
+  logging: *logging
+  stop_grace_period: 60s
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:?Pass --env-file backend/.env.production}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Missing production database password}
+      POSTGRES_DB: ${DB_DATABASE:?Missing production database name}
+    command:
+      - postgres
+      - -c
+      - max_connections=60
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+    volumes:
+      - production_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 768m
+    logging: *logging
+    restart: unless-stopped
+
+  prepare:
+    <<: *backend
+    command: ["./bin/rails", "db:prepare"]
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 1g
+    restart: "no"
+
+  web:
+    <<: *backend
+    command: ["./bin/rails", "server", "-b", "0.0.0.0", "-p", "3000"]
+    depends_on:
+      prepare:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:3000/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    mem_limit: 1g
+    restart: unless-stopped
+
+  worker:
+    <<: *backend
+    command: ["./bin/jobs"]
+    depends_on:
+      prepare:
+        condition: service_completed_successfully
+    mem_limit: 768m
+    restart: unless-stopped
+
+  frontend:
+    image: easyslotting-frontend:production
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.production
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Missing public application domain}
+      ACME_EMAIL: ${ACME_EMAIL:?Missing certificate contact email}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - production_caddy_data:/data
+      - production_caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    mem_limit: 128m
+    logging: *logging
+    restart: unless-stopped
+
+volumes:
+  production_db:
+  production_storage:
+  production_uploads:
+  production_caddy_data:
+  production_caddy_config:

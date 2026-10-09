@@ -1,0 +1,43 @@
+﻿Olá, <%= @customer.name %>!
+
+Seu agendamento é em 1 hora. Por favor, confirme sua presença para garantir seu horário.
+
+<% if @is_package %>
+TIPO: Pacote Mensal
+<% else %>
+TIPO: Serviço Avulso
+<% end %>
+
+INFORMAÇÕES DO ESTABELECIMENTO
+================================
+Nome: <%= @establishment.name %>
+<% if @establishment.address.present? %>
+Endereço: <%= [@establishment.address.street, @establishment.address.number, @establishment.address.neighborhood, @establishment.address.city].compact.join(', ') %>
+<% end %>
+<% if @establishment.phone.present? %>
+Telefone: <%= @establishment.phone %>
+<% end %>
+
+DETALHES DO AGENDAMENTO
+========================
+Serviço: <%= @service.name %>
+Profissional: <%= @employee.name %>
+Duração: <%= @service.duration_minutes %> minutos
+<% if @is_package && @package %>
+Pacote: <%= @package.name %> (<%= @package.sessions_total %> sessões)
+<% end %>
+
+HORÁRIO DO ATENDIMENTO
+========================
+Data: <%= @appointment.appointment_date.strftime('%d/%m/%Y') %>
+Horário: <%= @appointment.start_time.respond_to?(:strftime) ? @appointment.start_time.strftime('%H:%M') : @appointment.start_time.to_s[0, 5] %>
+
+CONFIRMAR PRESENÇA
+====================
+Acesse o link abaixo para confirmar:
+<%= ENV.fetch('FRONTEND_URL', 'http://localhost:5173') %>/empresa/<%= @slug %>/meus-agendamentos
+
+IMPORTANTE: Caso não possa ir no dia, utilize o botão "Reagendar" para escolher outro horário.
+
+---
+Este é um e-mail automático enviado pela plataforma EasySloting.

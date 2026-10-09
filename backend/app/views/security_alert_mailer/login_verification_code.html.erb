@@ -1,0 +1,64 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta content='text/html; charset=UTF-8' http-equiv='Content-Type' />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+    .container { max-width: 600px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .header { background: linear-gradient(135deg, #0d6efd, #6610f2); padding: 30px; text-align: center; }
+    .header h1 { color: #fff; margin: 0; font-size: 24px; }
+    .content { padding: 30px; }
+    .alert-box { background: #e7f1ff; border: 1px solid #0d6efd; border-radius: 8px; padding: 15px; margin: 20px 0; text-align: center; }
+    .otp-code { font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #0d6efd; margin: 15px 0; font-family: monospace; }
+    .info-table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+    .info-table td { padding: 10px; border-bottom: 1px solid #eee; }
+    .info-table td:first-child { font-weight: bold; width: 120px; color: #666; }
+    .footer { background: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #666; }
+    .footer a { color: #0d6efd; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🔑 EasySloting - Verificação de Acesso</h1>
+    </div>
+
+    <div class="content">
+      <p>Olá, <strong><%= @user.name %></strong>,</p>
+
+      <p>Detectamos uma tentativa de login na sua conta a partir de um novo dispositivo ou localização. Para concluir seu acesso, utilize o código de verificação abaixo:</p>
+
+      <div class="alert-box">
+        <div style="font-size: 13px; color: #495057; text-transform: uppercase; font-weight: 600;">Seu Código de Verificação</div>
+        <div class="otp-code"><%= @otp_code %></div>
+        <div style="font-size: 12px; color: #6c757d;">Este código expira em 10 minutos.</div>
+      </div>
+
+      <p><strong>Detalhes da tentativa de acesso:</strong></p>
+      <table class="info-table">
+        <tr>
+          <td>Endereço IP:</td>
+          <td><%= @ip %></td>
+        </tr>
+        <tr>
+          <td>Localização:</td>
+          <td><%= @location[:city] %>, <%= @location[:region] %>, <%= @location[:country] %></td>
+        </tr>
+        <tr>
+          <td>Navegador:</td>
+          <td><%= @user_agent.to_s[0, 100] %></td>
+        </tr>
+      </table>
+
+      <p style="font-size: 13px; color: #dc3545; background-color: #f8d7da; padding: 12px; border-radius: 6px;">
+        ⚠️ <strong>Atenção:</strong> Se você não tentou realizar o login, ignore este e-mail e altere sua senha imediatamente. Nunca compartilhe este código com ninguém.
+      </p>
+    </div>
+
+    <div class="footer">
+      <p>Este é um e-mail automático de segurança da EasySloting. Por favor, não responda.</p>
+      <p>© <%= Date.current.year %> EasySloting - Todos os direitos reservados.</p>
+    </div>
+  </div>
+</body>
+</html>

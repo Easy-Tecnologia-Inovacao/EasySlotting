@@ -1,0 +1,37 @@
+criar somente um site individual 
+
+retirar o botão de serviços no navbar
+
+mudar a home para que no carrossel passe os feedbacks dos clientes 
+
+retirar o painel de busca 
+
+adicionar cancelamento de agendamento
+
+crie sistema de layout para cores para o site
+
+em serviços adicionar qual e o tipo de funcionamento do estabelecimento aluguel de cadeiras etc.. ou funcionários do estabelecimento
+
+gerenciar equipe adicionar painel para contas de banco para pix e cartão na cobrança
+
+adicionar um menu para gerenciar e criar produtos no estabelecimento
+
+adicionar um menu para dashboard em forma de pizza para produtos e para os tipos de serviços
+
+adicionar um menu feedbacks com opção para setar no carrossel da home
+
+criar um sistema de pacote todo mes
+
+
+
+
+
+
+
+
+
+
+
+
+
+

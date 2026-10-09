@@ -1,0 +1,41 @@
+﻿Olá, <%= @employee.name %>!
+
+Um novo agendamento foi adicionado à sua agenda. Veja abaixo os detalhes:
+
+====================================================
+<% if @is_package %>PACOTE MENSAL<% else %>SERVIÇO AVULSO<% end %>
+====================================================
+
+Detalhes do Agendamento:
+----------------------------------------------------
+Cliente: <%= @customer.name %>
+Serviço: <%= @service.name %>
+<% if @is_package && @package %>
+Pacote: <%= @package.name %> (<%= @package.sessions_total %> sessões)
+<% end %>
+Tipo: <%= @is_package ? 'Pacote Mensal' : 'Serviço Avulso' %>
+Duração: <%= @service.duration_minutes %> minutos
+<% if @appointment.notes.present? %>
+Observações: <%= @appointment.notes %>
+<% end %>
+
+<% unless @is_package %>
+====================================================
+Horário do Atendimento:
+----------------------------------------------------
+Data: <%= @appointment.appointment_date.strftime('%d/%m/%Y') %>
+Horário: <%= @appointment.start_time.respond_to?(:strftime) ? @appointment.start_time.strftime('%H:%M') : @appointment.start_time.to_s[0, 5] %>
+<% end %>
+
+<% if @is_package && @package_appointments.present? && @package_appointments.count > 1 %>
+====================================================
+Agendamento das Sessões do Pacote:
+----------------------------------------------------
+<% @package_appointments.each_with_index do |appt, index| %>
+Sessão <%= index + 1 %>: <%= appt.appointment_date.strftime('%d/%m/%Y') %> às <%= appt.start_time.respond_to?(:strftime) ? appt.start_time.strftime('%H:%M') : appt.start_time.to_s[0, 5] %>
+<% end %>
+<% end %>
+
+Você pode gerenciar os horários e verificar a sua agenda completa acessando o painel administrativo da empresa.
+
+Este é um e-mail automático enviado pela plataforma EasySloting. Por favor, não responda diretamente a esta mensagem.

@@ -1,0 +1,19 @@
+{
+  auto_https disable_redirects
+}
+
+https://{$STAGING_HOST:localhost}:8443 {
+  tls internal
+  encode gzip
+
+  @backend path /api/* /uploads/* /up
+  handle @backend {
+    reverse_proxy web:3000
+  }
+
+  handle {
+    root * /srv
+    try_files {path} /index.html
+    file_server
+  }
+}

@@ -1,0 +1,46 @@
+﻿Olá, <%= @customer.name %>!
+
+Seu agendamento foi reagendado com sucesso. Veja abaixo as alterações:
+
+====================================================
+REAGENDAMENTO
+====================================================
+<% if @is_package %>PACOTE MENSAL — Sessão <%= @session_number %>/<%= @package&.sessions_total %><% else %>SERVIÇO AVULSO<% end %>
+
+Alterações Realizadas:
+----------------------------------------------------
+<% if @is_package && @session_number %>Sessão: <%= @session_number %>/<%= @package&.sessions_total %>
+<% end %>
+Data: <%= @old_date.respond_to?(:strftime) ? @old_date.strftime('%d/%m/%Y') : @old_date.to_s[0, 10].split('-').reverse.join('/') %> → <%= @appointment.appointment_date.strftime('%d/%m/%Y') %>
+Horário: <%= @old_time || '—' %> → <%= @appointment.start_time.respond_to?(:strftime) ? @appointment.start_time.strftime('%H:%M') : @appointment.start_time.to_s[0, 5] %>
+
+Detalhes do Agendamento:
+----------------------------------------------------
+Serviço: <%= @service.name %>
+Profissional: <%= @employee.name %>
+<% if @is_package && @package %>
+Pacote: <%= @package.name %> (<%= @package.sessions_total %> sessões)
+<% end %>
+Tipo: <%= @is_package ? 'Pacote Mensal' : 'Serviço Avulso' %>
+Duração: <%= @service.duration_minutes %> minutos
+Valor: R$ <%= number_with_precision(@is_package ? @package_price : (@appointment.price_snapshot || @service.price), precision: 2, separator: ',', delimiter: '.') %>
+<%= @is_package ? 'O pagamento do pacote será realizado no estabelecimento na primeira sessão.' : 'O pagamento será realizado no estabelecimento no dia do atendimento.' %>
+
+<% unless @is_package %>
+====================================================
+Novo Horário do Atendimento:
+----------------------------------------------------
+Data: <%= @appointment.appointment_date.strftime('%d/%m/%Y') %>
+Horário: <%= @appointment.start_time.respond_to?(:strftime) ? @appointment.start_time.strftime('%H:%M') : @appointment.start_time.to_s[0, 5] %>
+<% end %>
+
+<% if @is_package && @package_appointments.present? && @package_appointments.count > 1 %>
+====================================================
+Agendamento das Sessões do Pacote:
+----------------------------------------------------
+<% @package_appointments.each_with_index do |appt, index| %>
+Sessão <%= index + 1 %>: <%= appt.appointment_date.strftime('%d/%m/%Y') %> às <%= appt.start_time.respond_to?(:strftime) ? appt.start_time.strftime('%H:%M') : appt.start_time.to_s[0, 5] %>
+<% end %>
+<% end %>
+
+Este é um e-mail automático enviado pela plataforma EasySloting. Por favor, não responda diretamente a esta mensagem.

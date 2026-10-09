@@ -1,0 +1,12 @@
+
+one:
+  email: "owner@a.com"
+  encrypted_password: "<%= Devise::Encryptor.digest(User, 'password') %>"
+  role: "owner"
+  confirmed_at: <%= Time.current %>
+
+two:
+  email: "employee@a.com"
+  encrypted_password: "<%= Devise::Encryptor.digest(User, 'password') %>"
+  role: "employee"
+  confirmed_at: <%= Time.current %>
