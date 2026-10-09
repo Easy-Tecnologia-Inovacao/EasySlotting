@@ -3,6 +3,8 @@
 # Segurança: autenticação JWT obrigatória, validação de entrada,
 # auditoria de alterações, proteção contra abuse.
 
+require 'vips'
+
 class Customer::ProfileController < ApplicationController
   before_action :authenticate_customer!
 
@@ -327,10 +329,9 @@ class Customer::ProfileController < ApplicationController
     # Retorna informações sobre sessões ativas (últimos logins)
     recent_logs = AuditLog.where(
       establishment_id: current_customer.establishment_id,
-      action: %w[login_success login_failure]
-    ).where(
-      '(auditable_type = ? AND auditable_id = ?) OR user_id = ?',
-      'Customer', current_customer.id, current_customer.id
+      action: %w[login_success login_failure],
+      auditable_type: 'Customer',
+      auditable_id: current_customer.id
     ).order(created_at: :desc).limit(10).map do |log|
       {
         action: log.action,
@@ -379,7 +380,16 @@ class Customer::ProfileController < ApplicationController
     FileUtils.mkdir_p(upload_dir)
 
     file_path = upload_dir.join(filename)
-    File.open(file_path, 'wb') { |f| f.write(file.read) }
+
+    # Reencoda o conteúdo para garantir que o arquivo público seja uma imagem
+    # válida, além de impedir dimensões que possam causar consumo excessivo.
+    data = file.read
+    image = Vips::Image.new_from_buffer(data, '', access: :sequential)
+    pixel_count = image.width.to_i * image.height.to_i
+    raise StandardError, 'Dimensões da imagem excedem o limite permitido.' if image.width > 5000 || image.height > 5000 || pixel_count > 25_000_000
+
+    options = detected_type == 'image/png' ? { compression: 6, strip: true } : { Q: 85, strip: true }
+    image.write_to_file(file_path.to_s, **options)
 
     "/uploads/customers/#{filename}"
   end

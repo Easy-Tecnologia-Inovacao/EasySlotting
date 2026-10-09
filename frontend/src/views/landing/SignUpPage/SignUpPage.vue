@@ -227,6 +227,7 @@
 import { ref, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/services/api'
+import { setStaffAccessToken } from '@/services/staffAuth'
 
 const router = useRouter()
 const isDarkMode = ref(localStorage.getItem('easysloting_theme') === 'dark')
@@ -259,11 +260,11 @@ watch(
 
 const nextStep = () => {
   // Validações básicas do passo 1 antes de avançar
-  if (!form.owner_name || !form.email || !form.cnpj || !form.category || !form.password) {
+  if (!form.owner_name.trim() || !form.email.trim() || !form.cnpj || !form.category || !form.password) {
     alert('Por favor, preencha todos os campos obrigatórios do Passo 1.')
     return
   }
-  if (form.category === 'Outro' && !form.custom_category) {
+  if (form.category === 'Outro' && !form.custom_category.trim()) {
     alert('Por favor, especifique o seu ramo de atuação.')
     return
   }
@@ -335,8 +336,9 @@ const onWhatsappInput = (e) => {
 
 const sanitizeField = (field) => {
   if (form[field]) {
-    // Remove caracteres que podem ser usados para XSS ou injeção
-    form[field] = form[field].replace(/[<>]/g, '').trim()
+    // Remove caracteres perigosos sem cortar o espaço que o usuário acabou de digitar.
+    // O trim das extremidades acontece na validação/envio do formulário.
+    form[field] = form[field].replace(/[<>]/g, '')
   }
 }
 
@@ -354,19 +356,19 @@ const onlyDigits = (value) => value ? value.replace(/\D/g, '') : ''
 const handleSubmit = async () => {
   const payload = {
     user: {
-      name: form.owner_name,
-      email: form.email,
+      name: form.owner_name.trim(),
+      email: form.email.trim(),
       password: form.password,
       password_confirmation: form.password_confirmation
     },
     establishment: {
-      name: form.business_name,
+      name: form.business_name.trim(),
       slug: slugify(form.business_name),
       cnpj: onlyDigits(form.cnpj),
-      category: form.category === 'Outro' ? form.custom_category : form.category,
+      category: (form.category === 'Outro' ? form.custom_category : form.category).trim(),
       phone: onlyDigits(form.fixed_phone),
       whatsapp: onlyDigits(form.whatsapp),
-      address: form.address
+      address: form.address.trim()
     }
   }
 
@@ -379,9 +381,9 @@ const handleSubmit = async () => {
     const uid = response.headers['uid'] || ''
     const user = response.data?.user || response.data?.data?.user || {}
 
-    localStorage.setItem('access-token', accessToken)
-    localStorage.setItem('client', client)
-    localStorage.setItem('uid', uid)
+    setStaffAccessToken(accessToken)
+    sessionStorage.setItem('client', client)
+    sessionStorage.setItem('uid', uid)
     localStorage.setItem('user', JSON.stringify(user))
     localStorage.setItem('role', user?.role || '')
 

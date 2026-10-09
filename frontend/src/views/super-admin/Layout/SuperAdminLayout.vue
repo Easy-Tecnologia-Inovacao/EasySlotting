@@ -158,6 +158,7 @@ import { watch, onMounted, ref, computed } from 'vue'
 import { useThemeStore } from '@/stores/themeStore'
 import { useRouter } from 'vue-router'
 import { api } from '@/services/api'
+import { getStaffAccessToken } from '@/services/staffAuth'
 import { Offcanvas } from 'bootstrap'
 
 const store  = useThemeStore()
@@ -228,9 +229,9 @@ const clearSession = () => {
 
 const logout = async () => {
   const headers = {
-    'access-token': localStorage.getItem('access-token') || sessionStorage.getItem('access-token') || '',
-    'client':       localStorage.getItem('client')       || sessionStorage.getItem('client')       || '',
-    'uid':          localStorage.getItem('uid')          || sessionStorage.getItem('uid')          || ''
+    'access-token': getStaffAccessToken() || '',
+    'client':       sessionStorage.getItem('client')       || '',
+    'uid':          sessionStorage.getItem('uid')          || ''
   }
 
   try {

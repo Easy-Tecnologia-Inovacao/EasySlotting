@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { isCustomerLoggedIn } from '@/services/customerAuth'
+import { getStaffAccessToken } from '@/services/staffAuth'
 
 // MAIN SISTEMA (LANDING)
 import LandingPage from '@/views/landing/LandingPage/LandingPage.vue'
@@ -272,9 +273,7 @@ router.beforeEach((to) => {
     sessionStorage.setItem('site-slug', String(to.params.slug))
   }
 
-  const token =
-    localStorage.getItem('access-token') ||
-    sessionStorage.getItem('access-token')
+  const token = getStaffAccessToken()
 
   const rawUser =
     localStorage.getItem('user') ||

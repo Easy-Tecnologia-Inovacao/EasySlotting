@@ -323,6 +323,7 @@ import { computed, onMounted, onUnmounted, watch, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useThemeStore } from '@/stores/themeStore'
 import { api } from '@/services/api'
+import { getStaffAccessToken } from '@/services/staffAuth'
 
 const router = useRouter()
 const store  = useThemeStore()
@@ -353,10 +354,7 @@ const formatPrice = (value) =>
 // ─── Autenticação ─────────────────────────────────────────────────────────────
 const refreshAuthState = () => { authVersion.value++ }
 
-const getToken = () =>
-  localStorage.getItem('access-token') ||
-  sessionStorage.getItem('access-token') ||
-  ''
+const getToken = () => getStaffAccessToken() || ''
 
 const getStoredUser = () => {
   authVersion.value

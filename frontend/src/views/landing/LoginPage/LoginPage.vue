@@ -197,6 +197,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { api, getOrCreateDeviceToken } from '@/services/api'
+import { clearStaffAccessToken, setStaffAccessToken } from '@/services/staffAuth'
 import LoginVerificationModal from '@/components/LoginVerificationModal.vue'
 
 const router = useRouter()
@@ -266,11 +267,13 @@ const clearSession = () => {
     localStorage.removeItem(key)
     sessionStorage.removeItem(key)
   })
+  clearStaffAccessToken()
 }
 
 const saveSession = (accessToken, client, uid, user) => {
-  const storage = form.remember ? localStorage : sessionStorage
-  storage.setItem('access-token', accessToken)
+  // Tokens de autenticação ficam somente na sessão atual.
+  const storage = sessionStorage
+  setStaffAccessToken(accessToken)
   storage.setItem('client', client)
   storage.setItem('uid', uid)
   storage.setItem('user', JSON.stringify(user))

@@ -405,6 +405,7 @@ import { watch, onMounted, ref, computed, nextTick } from 'vue'
 import { useThemeStore } from '@/stores/themeStore'
 import { useRouter, useRoute } from 'vue-router'
 import { api } from '@/services/api'
+import { clearStaffAccessToken, getStaffAccessToken } from '@/services/staffAuth'
 import { Offcanvas, Modal } from 'bootstrap'
 
 const store = useThemeStore()
@@ -455,9 +456,7 @@ const resetOffcanvasState = () => {
 
 const carregarSlug = async () => {
   try {
-    const accessToken =
-      localStorage.getItem('access-token') ||
-      sessionStorage.getItem('access-token')
+    const accessToken = getStaffAccessToken()
 
     const client =
       localStorage.getItem('client') ||
@@ -538,10 +537,7 @@ const handleOpenSite = async () => {
 }
 
 const logout = async () => {
-  const accessToken =
-    localStorage.getItem('access-token') ||
-    sessionStorage.getItem('access-token') ||
-    ''
+  const accessToken = getStaffAccessToken() || ''
 
   const client =
     localStorage.getItem('client') ||
@@ -566,7 +562,7 @@ const logout = async () => {
   } finally {
     // Restaura tokens do localStorage
     localStorage.removeItem('establishment-data')
-    localStorage.removeItem('access-token')
+    clearStaffAccessToken()
     localStorage.removeItem('client')
     localStorage.removeItem('uid')
     localStorage.removeItem('user')
@@ -575,7 +571,7 @@ const logout = async () => {
     localStorage.removeItem('establishment-permissions')
     localStorage.removeItem('salon-config')
 
-    sessionStorage.removeItem('access-token')
+    clearStaffAccessToken()
     sessionStorage.removeItem('client')
     sessionStorage.removeItem('uid')
     sessionStorage.removeItem('user')

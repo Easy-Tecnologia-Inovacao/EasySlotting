@@ -7,6 +7,7 @@ import {
   updateAccessToken,
   isTokenExpiringSoon
 } from '@/services/customerAuth'
+import { clearStaffAccessToken, getStaffAccessToken, setStaffAccessToken } from '@/services/staffAuth'
 
 // Utiliza variável de ambiente para a URL da API.
 // Em desenvolvimento, se não houver VITE_API_URL, detecta o host atual para facilitar acesso via IP/Mobile.
@@ -85,10 +86,7 @@ api.interceptors.request.use(async (config) => {
   }
 
   // Rotas staff usam Devise Token Auth via headers (cookies httpOnly para refresh)
-  const accessToken =
-    localStorage.getItem('access-token') ||
-    sessionStorage.getItem('access-token') ||
-    ''
+  const accessToken = getStaffAccessToken() || ''
 
   const client =
     localStorage.getItem('client') ||
@@ -124,12 +122,9 @@ api.interceptors.response.use(
       const uid         = response.headers['uid']          || response.headers['Uid']
 
       if (accessToken && client && uid) {
-        const isLocal = !!localStorage.getItem('uid') || !!localStorage.getItem('access-token')
-        const storage = isLocal ? localStorage : sessionStorage
-
-        storage.setItem('access-token', accessToken)
-        storage.setItem('client', client)
-        storage.setItem('uid', uid)
+        setStaffAccessToken(accessToken)
+        sessionStorage.setItem('client', client)
+        sessionStorage.setItem('uid', uid)
       }
     }
 
@@ -217,6 +212,7 @@ api.interceptors.response.use(
         localStorage.removeItem(key)
         sessionStorage.removeItem(key)
       })
+      clearStaffAccessToken()
 
       if (!role || role === 'customer') {
         const urlMatch = window.location.pathname.match(/\/empresa\/([^/]+)/)

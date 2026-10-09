@@ -756,8 +756,7 @@ const updateStorage = (updatedCustomer: any) => {
   const accessToken = getCustomerToken()
   const slug  = getCustomerSlug() || ''
   if (accessToken) {
-    const isLocal = !!localStorage.getItem('customer-access-token')
-    saveCustomerSession(accessToken, updatedCustomer, slug, isLocal)
+    saveCustomerSession(accessToken, updatedCustomer, slug, false)
   }
 }
 
