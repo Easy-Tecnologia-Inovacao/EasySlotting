@@ -158,7 +158,7 @@ import { watch, onMounted, ref, computed } from 'vue'
 import { useThemeStore } from '@/stores/themeStore'
 import { useRouter } from 'vue-router'
 import { api } from '@/services/api'
-import { getStaffAccessToken } from '@/services/staffAuth'
+import { clearStaffAccessToken, getStaffAccessToken } from '@/services/staffAuth'
 import { Offcanvas } from 'bootstrap'
 
 const store  = useThemeStore()
@@ -225,6 +225,7 @@ const clearSession = () => {
     localStorage.removeItem(k)
     sessionStorage.removeItem(k)
   })
+  clearStaffAccessToken()
 }
 
 const logout = async () => {

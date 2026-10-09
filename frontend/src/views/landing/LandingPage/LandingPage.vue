@@ -323,7 +323,7 @@ import { computed, onMounted, onUnmounted, watch, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useThemeStore } from '@/stores/themeStore'
 import { api } from '@/services/api'
-import { getStaffAccessToken } from '@/services/staffAuth'
+import { clearStaffAccessToken, getStaffAccessToken } from '@/services/staffAuth'
 
 const router = useRouter()
 const store  = useThemeStore()
@@ -398,6 +398,7 @@ const logout = async () => {
       localStorage.removeItem(k)
       sessionStorage.removeItem(k)
     })
+    clearStaffAccessToken()
     refreshAuthState()
     router.push('/')
   }
