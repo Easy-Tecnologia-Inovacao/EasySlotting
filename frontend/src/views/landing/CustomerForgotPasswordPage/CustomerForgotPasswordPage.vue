@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     class="forgot-page bg-body text-body min-vh-100 d-flex flex-column"
     :data-bs-theme="isDarkMode ? 'dark' : 'light'"
@@ -116,7 +116,7 @@ const currentSlug = computed(() =>
   ''
 )
 
-const establishmentName = computed(() => store.salonConfig?.nome || 'EasySloting')
+const establishmentName = computed(() => store.salonConfig?.nome || 'EasySlotting')
 
 const backRoute = computed(() =>
   currentSlug.value ? `/empresa/${currentSlug.value}` : '/'

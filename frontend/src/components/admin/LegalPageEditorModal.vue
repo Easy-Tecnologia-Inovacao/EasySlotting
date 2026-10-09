@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     v-if="show"
     class="modal fade show d-block legal-editor-modal-backdrop"
@@ -589,7 +589,7 @@ function saveChanges() {
 
 const defaultTemplates: Record<string, string> = {
   privacy_policy: `<h2>1. Controlador dos Dados</h2>
-<p>O controlador dos dados pessoais é o estabelecimento parceiro <strong>[ NOME DO SEU ESTABELECIMENTO ]</strong> onde você realizou seu cadastro. A EasySloting atua como operadora de dados, processando informações em nome do estabelecimento.</p>
+<p>O controlador dos dados pessoais é o estabelecimento parceiro <strong>[ NOME DO SEU ESTABELECIMENTO ]</strong> onde você realizou seu cadastro. A EasySlotting atua como operadora de dados, processando informações em nome do estabelecimento.</p>
 
 <h2>2. Dados Coletados</h2>
 <p>Coletamos as seguintes informações durante o uso dos nossos serviços:</p>
@@ -625,7 +625,7 @@ const defaultTemplates: Record<string, string> = {
   <li>Necessário para cumprir obrigação legal ou regulatória</li>
   <li>Autorizado por você de forma expressa</li>
   <li>Necessário para a prestação do serviço contratado (ex: profissional do estabelecimento)</li>
-  <li>Proteção dos direitos do estabelecimento ou da EasySloting</li>
+  <li>Proteção dos direitos do estabelecimento ou da EasySlotting</li>
 </ul>
 
 <h2>6. Segurança dos Dados</h2>
@@ -670,11 +670,11 @@ const defaultTemplates: Record<string, string> = {
 <p>Para exercer seus direitos ou esclarecer dúvidas sobre esta política, entre em contato diretamente com o <strong>[ NOME DO SEU ESTABELECIMENTO ]</strong> pelo e-mail <strong>[ EMAIL DO ESTABELECIMENTO ]</strong> ou telefone <strong>[ TELEFONE / CONTATO ]</strong>.</p>
 
 <p><em>Última atualização: [ DATA DE ATUALIZAÇÃO ]</em></p>
-<p><em>Política gerenciada pela plataforma EasySloting em conformidade com a LGPD.</em></p>`,
+<p><em>Política gerenciada pela plataforma EasySlotting em conformidade com a LGPD.</em></p>`,
 
   terms_of_use: `<h2>1. Definições</h2>
 <ul>
-  <li><strong>Plataforma:</strong> Sistema EasySloting de agendamento online</li>
+  <li><strong>Plataforma:</strong> Sistema EasySlotting de agendamento online</li>
   <li><strong>Estabelecimento:</strong> <strong>[ NOME DO SEU ESTABELECIMENTO ]</strong></li>
   <li><strong>Cliente:</strong> Usuário que realiza cadastro e agendamentos</li>
   <li><strong>Serviço:</strong> Atendimento oferecido pelo <strong>[ NOME DO SEU ESTABELECIMENTO ]</strong></li>

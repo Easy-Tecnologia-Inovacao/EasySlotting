@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="login-page bg-body text-body min-vh-100 d-flex flex-column" :data-bs-theme="isDarkMode ? 'dark' : 'light'">
 
     <!-- Theme toggle -->
@@ -210,7 +210,7 @@ const currentSlug = computed(() =>
   ''
 )
 
-const establishmentName = computed(() => store.salonConfig?.nome || 'EasySloting')
+const establishmentName = computed(() => store.salonConfig?.nome || 'EasySlotting')
 
 const backRoute = computed(() =>
   currentSlug.value ? `/empresa/${currentSlug.value}` : '/'

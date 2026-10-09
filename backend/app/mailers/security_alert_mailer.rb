@@ -15,7 +15,7 @@ class SecurityAlertMailer < ApplicationMailer
 
     mail(
       to: @user.email,
-      subject: '🔒 Novo login detectado na sua conta - EasySloting'
+      subject: '🔒 Novo login detectado na sua conta - EasySlotting'
     )
   end
 
@@ -29,7 +29,7 @@ class SecurityAlertMailer < ApplicationMailer
 
     mail(
       to: @user.email,
-      subject: '⚠️ Tentativa de login na sua conta - EasySloting'
+      subject: '⚠️ Tentativa de login na sua conta - EasySlotting'
     )
   end
 
@@ -43,7 +43,7 @@ class SecurityAlertMailer < ApplicationMailer
 
     mail(
       to: @user.email,
-      subject: '🔑 Sua senha foi alterada - EasySloting'
+      subject: '🔑 Sua senha foi alterada - EasySlotting'
     )
   end
 
@@ -57,7 +57,7 @@ class SecurityAlertMailer < ApplicationMailer
 
     mail(
       to: @user.email,
-      subject: '🔒 Sua conta foi bloqueada - EasySloting'
+      subject: '🔒 Sua conta foi bloqueada - EasySlotting'
     )
   end
 
@@ -72,7 +72,7 @@ class SecurityAlertMailer < ApplicationMailer
 
     mail(
       to: @user.email,
-      subject: "🔑 #{@otp_code} é o seu código de verificação de login - EasySloting"
+      subject: "🔑 #{@otp_code} é o seu código de verificação de login - EasySlotting"
     )
   end
 end

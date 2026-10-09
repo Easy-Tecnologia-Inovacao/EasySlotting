@@ -1,11 +1,11 @@
-﻿<template>
+<template>
   <div class="landing-page min-vh-100 bg-body text-body" :data-bs-theme="store.isDarkMode ? 'dark' : 'light'">
 
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg py-3 sticky-top navbar-glass">
       <div class="container">
         <router-link to="/" class="navbar-brand fw-800 fs-3 text-primary d-flex align-items-center gap-2">
-          <i class="bi bi-calendar-check-fill"></i> EASYSLOTING
+          <i class="bi bi-calendar-check-fill"></i> EASYSLOTTING
         </router-link>
 
         <div class="ms-auto d-flex align-items-center gap-2 gap-md-3 navbar-actions">
@@ -312,7 +312,7 @@
 
     <!-- Footer mínimo -->
     <footer class="py-4 border-top text-center text-secondary small">
-      © {{ new Date().getFullYear() }} EasySloting. Todos os direitos reservados.
+      © {{ new Date().getFullYear() }} EasySlotting. Todos os direitos reservados.
     </footer>
 
   </div>

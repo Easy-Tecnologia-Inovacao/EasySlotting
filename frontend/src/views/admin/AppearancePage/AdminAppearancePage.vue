@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AdminLayout>
     <div class="container-fluid px-0">
       <div class="row g-0 aparencia-container">
@@ -614,7 +614,7 @@
                 </div>
 
                 <hr class="my-4 opacity-10">
-                <p class="text-center small mb-0 dynamic-text" style="opacity: 0.7;">© 2026 {{ store.salonConfig.nome }} - Todos os direitos reservados. Feito com EasySloting.</p>
+                <p class="text-center small mb-0 dynamic-text" style="opacity: 0.7;">© 2026 {{ store.salonConfig.nome }} - Todos os direitos reservados. Feito com EasySlotting.</p>
               </div>
             </footer>
 

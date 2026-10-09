@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     class="legal-page bg-body text-body min-vh-100"
     :data-bs-theme="isDarkMode ? 'dark' : 'light'"
@@ -7,7 +7,7 @@
     <nav class="navbar navbar-expand-lg fixed-top shadow-sm py-3" style="background: var(--glass-bg); backdrop-filter: blur(15px); z-index: 1030;">
       <div class="container">
         <router-link :to="`/empresa/${slug}`" class="navbar-brand fw-bold fs-3 text-primary m-0">
-          {{ establishmentName || 'EasySloting' }}
+          {{ establishmentName || 'EasySlotting' }}
         </router-link>
         <router-link :to="`/empresa/${slug}`" class="btn btn-sm btn-outline-primary rounded-pill">
           <i class="bi bi-arrow-left me-1"></i>Voltar ao site

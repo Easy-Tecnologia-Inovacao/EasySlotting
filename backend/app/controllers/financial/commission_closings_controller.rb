@@ -1,4 +1,4 @@
-﻿module Financial
+module Financial
   class CommissionClosingsController < ApplicationController
     before_action :authenticate_user!
     before_action :set_establishment
@@ -136,7 +136,7 @@
                                .where(reference_month: ref_month)
                                .recent_first
 
-      disclaimer = 'Os valores apresentados correspondem aos valores brutos calculados pelo sistema com base nos serviços registrados e nas regras de comissão configuradas. O EasySloting não realiza pagamentos nem determina tributos, retenções ou encargos aplicáveis.'
+      disclaimer = 'Os valores apresentados correspondem aos valores brutos calculados pelo sistema com base nos serviços registrados e nas regras de comissão configuradas. O EasySlotting não realiza pagamentos nem determina tributos, retenções ou encargos aplicáveis.'
 
       render json: {
         establishment_name: @establishment.name,

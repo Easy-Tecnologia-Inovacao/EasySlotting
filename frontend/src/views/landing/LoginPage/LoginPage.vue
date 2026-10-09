@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     class="login-page bg-body text-body min-vh-100 d-flex flex-column"
     :data-bs-theme="isDarkMode ? 'dark' : 'light'"
@@ -19,7 +19,7 @@
         <!-- Header -->
         <div class="text-center mb-4">
           <router-link to="/" class="text-decoration-none">
-            <h2 class="fw-800 text-primary mb-1">EASYSLOTING</h2>
+            <h2 class="fw-800 text-primary mb-1">EASYSLOTTING</h2>
           </router-link>
           <p class="text-secondary small fw-600">Acesse a área da empresa</p>
         </div>

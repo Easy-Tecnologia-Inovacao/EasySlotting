@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div :data-bs-theme="store.isDarkMode ? 'dark' : 'light'" class="app-wrapper min-vh-100 d-flex flex-column">
     <nav class="navbar navbar-expand-lg sticky-top shadow-sm py-3 navbar-custom">
       <div class="container-fluid px-lg-5 px-3 d-flex align-items-center">
@@ -13,7 +13,7 @@
         </button>
 
         <router-link class="navbar-brand fw-bold fs-3 text-primary m-0" to="/super-admin/dashboard">
-          <i class="bi bi-shield-lock-fill me-2 fs-4"></i>EasySloting
+          <i class="bi bi-shield-lock-fill me-2 fs-4"></i>EasySlotting
         </router-link>
 
         <div class="ms-auto d-flex align-items-center gap-3">

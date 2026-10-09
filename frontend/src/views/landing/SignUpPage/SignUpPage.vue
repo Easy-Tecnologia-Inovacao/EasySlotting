@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="register-page bg-body text-body min-vh-100" :data-bs-theme="isDarkMode ? 'dark' : 'light'">
     <div class="theme-switch-wrapper">
       <input type="checkbox" id="darkToggle" class="d-none" v-model="isDarkMode">
@@ -14,7 +14,7 @@
         <div class="login-card shadow-lg">
           <div class="text-center mb-4">
             <router-link to="/" class="text-decoration-none">
-              <h2 class="fw-800 text-primary mb-1">EASYSLOTING</h2>
+              <h2 class="fw-800 text-primary mb-1">EASYSLOTTING</h2>
             </router-link>
             <p class="text-secondary small fw-600">Crie sua conta empresarial em 2 etapas</p>
           </div>

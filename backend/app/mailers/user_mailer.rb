@@ -6,7 +6,7 @@ class UserMailer < ApplicationMailer
 
     mail(
       to: @user.email,
-      subject: 'Sua conta foi criada - EasySloting'
+      subject: 'Sua conta foi criada - EasySlotting'
     )
   end
 end

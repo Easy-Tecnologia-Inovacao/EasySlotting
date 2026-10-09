@@ -1,11 +1,11 @@
-﻿// src/stores/themeStore.ts
+// src/stores/themeStore.ts
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
 const SALON_CONFIG_KEY = 'salon-config'
 
 const defaultSalonConfig = {
-  nome: 'EasySloting',
+  nome: 'EasySlotting',
   descricao: '',
   booking_mode: 'time',
 

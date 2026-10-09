@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     :data-bs-theme="store.isDarkMode ? 'dark' : 'light'"
     class="app-wrapper min-vh-100 d-flex flex-column"
@@ -407,7 +407,7 @@ const currentSlug = computed(() => {
 })
 
 const siteName = computed(() => {
-  return store.salonConfig?.nome || 'EasySloting'
+  return store.salonConfig?.nome || 'EasySlotting'
 })
 
 const siteHomeRoute = computed(() => {

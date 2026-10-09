@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     class="reset-page bg-body text-body min-vh-100 d-flex flex-column"
     :data-bs-theme="isDarkMode ? 'dark' : 'light'"
@@ -20,7 +20,7 @@
         <template v-if="!hasToken">
           <div class="text-center">
             <router-link to="/" class="text-decoration-none">
-              <h2 class="fw-800 text-primary mb-1">EASYSLOTING</h2>
+              <h2 class="fw-800 text-primary mb-1">EASYSLOTTING</h2>
             </router-link>
             <div class="my-4">
               <i class="bi bi-shield-lock text-danger" style="font-size: 3rem;"></i>
@@ -42,7 +42,7 @@
         <template v-else-if="resetSuccess">
           <div class="text-center">
             <router-link to="/" class="text-decoration-none">
-              <h2 class="fw-800 text-primary mb-1">EASYSLOTING</h2>
+              <h2 class="fw-800 text-primary mb-1">EASYSLOTTING</h2>
             </router-link>
             <div class="success-icon my-4">
               <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
@@ -65,7 +65,7 @@
           <!-- Header -->
           <div class="text-center mb-4">
             <router-link to="/" class="text-decoration-none">
-              <h2 class="fw-800 text-primary mb-1">EASYSLOTING</h2>
+              <h2 class="fw-800 text-primary mb-1">EASYSLOTTING</h2>
             </router-link>
             <p class="text-secondary small fw-600">Redefinir senha</p>
           </div>

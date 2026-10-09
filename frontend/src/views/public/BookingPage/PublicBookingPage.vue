@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     :data-bs-theme="store.isDarkMode ? 'dark' : 'light'"
     class="bg-body text-body min-vh-100 pb-5 page-offset"
@@ -633,7 +633,7 @@
 
         <hr class="my-4 opacity-10">
         <p class="text-center small mb-0 dynamic-text" style="opacity: 0.7;">
-          © 2026 {{ store.salonConfig.nome }} - Todos os direitos reservados. Feito com EasySloting.
+          © 2026 {{ store.salonConfig.nome }} - Todos os direitos reservados. Feito com EasySlotting.
         </p>
       </div>
     </footer>
