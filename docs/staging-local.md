@@ -5,6 +5,10 @@ worker, frontend HTTPS e Mailpit em containers. O Gemfile é compartilhado:
 gems de development/test ficam fora da imagem. Os dados e segredos de staging
 são independentes do desenvolvimento e da produção.
 
+O repositório oficial desta instalação é
+`git@github.com:easytecnologiainovacao/EasySlotting.git`. As branches publicadas
+são `developing`, `staging` e `main`.
+
 ## Preparar a máquina
 
 Use uma VM Ubuntu Server 24.04 LTS no Windows com a mesma capacidade do plano
@@ -173,7 +177,7 @@ Clone o repositório privado dentro do disco Linux (autentique com sua conta,
 sem gravar token na URL), selecionando staging:
 
 ~~~bash
-git clone --branch staging --single-branch https://github.com/EasySlotting/EasySlotting.git
+git clone --branch staging --single-branch git@github.com:easytecnologiainovacao/EasySlotting.git
 cd EasySlotting
 hostname -I
 ~~~
