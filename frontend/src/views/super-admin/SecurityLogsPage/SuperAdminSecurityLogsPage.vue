@@ -1,21 +1,13 @@
 <template>
   <SuperAdminLayout>
-    <div class="security-logs-page">
+    <div class="security-logs-page container-fluid">
       <!-- Header -->
-      <div class="dashboard-header mb-4 p-4 rounded-4 shadow-sm position-relative overflow-hidden">
-        <div class="header-overlay"></div>
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 position-relative z-index-1">
-          <div class="d-flex align-items-center gap-3">
-            <div class="header-icon-container bg-danger bg-opacity-10 text-danger rounded-3 d-flex align-items-center justify-content-center border shadow-sm">
-              <i class="bi bi-shield-lock fs-3"></i>
-            </div>
-            <div>
-              <h1 class="h3 fw-800 mb-1 tracking-tight text-gradient">Logs de Segurança</h1>
-              <p class="text-muted mb-0 small-text-responsive">Monitore logins, tentativas falhas e atividades suspeitas em todos os estabelecimentos.</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SuperAdminPageHeader
+        eyebrow="Auditoria"
+        icon="bi-shield-lock"
+        title="Logs de Segurança"
+        subtitle="Monitore logins, tentativas falhas e atividades suspeitas em todos os estabelecimentos."
+      />
 
       <!-- Resumo de Segurança -->
       <div class="row g-3 mb-4">
@@ -186,6 +178,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import SuperAdminLayout from '@/views/super-admin/Layout/SuperAdminLayout.vue'
+import SuperAdminPageHeader from '@/components/super-admin/SuperAdminPageHeader.vue'
 import { api } from '@/services/api'
 
 const loading = ref(false)
@@ -318,28 +311,6 @@ onMounted(() => {
 .security-logs-page {
   width: 100%;
   min-height: calc(100vh - 100px);
-}
-
-.dashboard-header {
-  background: var(--bs-tertiary-bg);
-  border: 1px solid var(--card-border);
-}
-
-.header-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(13, 110, 253, 0.05), rgba(111, 66, 193, 0.05));
-}
-
-.header-icon-container {
-  width: 56px;
-  height: 56px;
-}
-
-.text-gradient {
-  background: linear-gradient(135deg, #0d6efd, #6610f2);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .table {

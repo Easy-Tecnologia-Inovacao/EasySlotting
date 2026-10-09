@@ -1,17 +1,24 @@
 <template>
 
-    <div class="container-fluid py-4">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div>
-          <h1 class="h3 mb-2">Dispositivos conectados</h1>
-          <p class="text-body-secondary mb-0">Acessos da sua conta. Encerre os que você não utiliza ou não reconhece.</p>
+    <div class="sessions-panel" :class="contained ? 'container-fluid' : 'page-content'">
+      <slot name="header" :refresh="loadSessions" :disabled="loading || busy">
+      <div class="sessions-header d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 p-4 rounded-4 shadow-sm">
+        <div class="sessions-heading d-flex align-items-center gap-3">
+          <div>
+            <h1 class="sessions-title h3 mb-1">Dispositivos conectados</h1>
+            <p class="text-body-secondary mb-0">Acessos da sua conta. Encerre os que você não utiliza ou não reconhece.</p>
+          </div>
         </div>
-        <button class="btn btn-outline-primary" :disabled="loading || busy" @click="loadSessions">Atualizar</button>
+        <button class="btn btn-outline-primary rounded-pill d-inline-flex align-items-center gap-2" :disabled="loading || busy" @click="loadSessions">
+          <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+          Atualizar
+        </button>
       </div>
+      </slot>
 
       <div v-if="errorMessage" class="alert alert-danger" role="alert">{{ errorMessage }}</div>
       <div v-if="successMessage" class="alert alert-success" role="status">{{ successMessage }}</div>
-      <div class="card border-0 shadow-sm rounded-4 mb-4">
+      <div class="card sessions-card shadow-sm rounded-4 mb-4">
         <div class="card-body p-4">
           <p class="fw-semibold mb-2">{{ sessions.length }} de {{ limit }} sessões disponíveis em uso</p>
           <p class="text-body-secondary mb-0">O limite é definido para o seu perfil e plano. Entrar novamente no mesmo navegador substitui o acesso anterior. Fechar uma aba não encerra a sessão no servidor.</p>
@@ -21,9 +28,9 @@
       <p v-if="loading" role="status">Carregando dispositivos…</p>
       <div v-else class="row g-3">
         <div v-for="session in sessions" :key="session.client_id" class="col-12 col-lg-6">
-          <div class="card h-100 border-0 shadow-sm rounded-4">
+          <div class="card sessions-card h-100 shadow-sm rounded-4">
             <div class="card-body p-4">
-              <div class="d-flex align-items-center gap-2 mb-3">
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
                 <i class="bi bi-laptop fs-4" aria-hidden="true"></i>
                 <h2 class="h5 mb-0">{{ session.device }}</h2>
                 <span v-if="session.is_current" class="badge text-bg-primary">Este acesso</span>
@@ -54,6 +61,7 @@ import { useRouter } from 'vue-router'
 import { api, logoutStaff } from '@/services/api'
 import { getStaffSessionVersion } from '@/services/staffAuth'
 
+defineProps<{ contained?: boolean }>()
 
 type Session = {
   client_id: string
@@ -138,3 +146,64 @@ async function revokeOthers() {
 
 onMounted(loadSessions)
 </script>
+
+<style scoped>
+.sessions-panel {
+  --sessions-card-bg: var(--glass-bg, var(--bs-body-bg));
+  max-width: 100%;
+  color: var(--bs-body-color);
+}
+
+.sessions-header {
+  background:
+    radial-gradient(circle at top right, rgba(var(--bs-primary-rgb), 0.08), transparent 70%),
+    var(--sessions-card-bg);
+  border: 1px solid var(--card-border, var(--bs-border-color));
+}
+
+.sessions-heading {
+  min-width: 0;
+}
+
+.sessions-title {
+  background: linear-gradient(135deg, var(--logo-color, var(--bs-primary)), #00c6ff);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.sessions-card {
+  background: var(--sessions-card-bg);
+  border: 1px solid var(--card-border, var(--bs-border-color));
+  color: var(--bs-body-color);
+}
+
+.sessions-card dd {
+  color: var(--bs-secondary-color);
+  overflow-wrap: anywhere;
+}
+
+[data-bs-theme='dark'] .sessions-panel {
+  --sessions-card-bg: var(--bs-tertiary-bg, #2b3035);
+}
+
+[data-bs-theme='dark'] .sessions-panel .btn-outline-primary {
+  --bs-btn-color: var(--bs-primary-text-emphasis);
+  --bs-btn-border-color: var(--bs-primary-text-emphasis);
+}
+
+[data-bs-theme='dark'] .sessions-panel .btn-outline-danger {
+  --bs-btn-color: var(--bs-danger-text-emphasis);
+  --bs-btn-border-color: var(--bs-danger-text-emphasis);
+}
+
+@media (forced-colors: active) {
+  .sessions-title {
+    background: none;
+    color: CanvasText;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+</style>
