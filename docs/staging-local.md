@@ -278,6 +278,29 @@ sudo systemctl enable --now docker
 sudo docker compose --env-file backend/.env.staging -f compose.staging.yaml down
 ~~~
 
+## Deploy automático pela branch `staging`
+
+O workflow `.github/workflows/deploy-staging.yml` executa o deploy a cada push
+em `staging`. O script `scripts/deploy-staging.sh` exige uma árvore Git limpa,
+atualiza com `git pull --ff-only`, valida o Compose, recria os serviços e
+aguarda o healthcheck do serviço `web`.
+
+Cadastre estes secrets no GitHub em **Settings > Secrets and variables > Actions**:
+
+- `STAGING_HOST`: IP ou hostname SSH da VM;
+- `STAGING_SSH_PORT`: normalmente `22`;
+- `STAGING_SSH_USER`: normalmente `deploy`;
+- `STAGING_SSH_PRIVATE_KEY`: chave privada usada somente pelo workflow.
+
+Como o runner não possui terminal interativo, o usuário de deploy precisa poder
+executar Docker sem senha. Prefira adicioná-lo ao grupo `docker` ou configure
+uma regra restrita de `sudo` para `/usr/bin/docker`, pois o script usa `sudo -n`.
+Teste na VM com:
+
+```bash
+bash ~/EasySlotting/scripts/deploy-staging.sh
+```
+
 Down para os serviços e preserva os volumes de banco, uploads, e-mails e
 certificados. Não use down -v para preservar os dados. Os volumes da VM não são
 um backup: copie banco e uploads para um armazenamento separado periodicamente.
