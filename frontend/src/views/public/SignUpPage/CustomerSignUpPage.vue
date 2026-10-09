@@ -248,7 +248,6 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { api, getOrCreateDeviceToken } from '@/services/api'
-import { saveCustomerSession, clearCustomerSession } from '@/services/customerAuth'
 import { useThemeStore } from '@/stores/themeStore'
 
 const router = useRouter()
@@ -446,24 +445,8 @@ const handleRegister = async () => {
 
     const response = await api.post(`/customer_auth/${currentSlug.value}/sign_up`, payload)
 
-    const { access_token, expires_in, csrf_token, customer } = response.data
-
-    clearCustomerSession()
-    saveCustomerSession(access_token, customer, currentSlug.value, false, expires_in, csrf_token)
-
-    successMsg.value = 'Conta criada com sucesso! Redirecionando...'
-
-    const redirectQuery = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : ''
-    const isSafeRedirect =
-      redirectQuery.length > 0 &&
-      !redirectQuery.startsWith('//') &&
-      !redirectQuery.startsWith('/\\') &&
-      !redirectQuery.includes('://') &&
-      (redirectQuery === `/empresa/${currentSlug.value}` || redirectQuery.startsWith(`/empresa/${currentSlug.value}/`))
-
-    const redirectTo = isSafeRedirect ? redirectQuery : `/empresa/${currentSlug.value}/minha-conta`
-
-    setTimeout(() => router.push(redirectTo), 600)
+    successMsg.value = 'Conta criada com sucesso! Faça login para continuar.'
+    setTimeout(() => router.push('/empresa/' + encodeURIComponent(currentSlug.value) + '/login'), 600)
 
   } catch (error: any) {
     const errs = error.response?.data?.errors

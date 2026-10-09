@@ -12,11 +12,7 @@ class Account::SubscriptionsController < ApplicationController
     subscription = nil
 
     @establishment.with_lock do
-      current_subscription = @establishment.subscriptions
-        .where(status: ['active', 'canceled'])
-        .where('end_date >= ?', Date.current)
-        .order(created_at: :desc)
-        .first
+      current_subscription = @establishment.subscriptions.current_for_use
 
       if current_subscription&.status == 'active' && current_subscription.plan_id == plan.id
         return render json: { error: 'Este plano já é o plano ativo do seu estabelecimento.' }, status: :unprocessable_entity
@@ -72,10 +68,7 @@ class Account::SubscriptionsController < ApplicationController
   def show_current
     subscription = @establishment.subscriptions
       .includes(:plan)
-      .where(status: ['active', 'canceled'])
-      .where('end_date >= ?', Date.current)
-      .order(created_at: :desc)
-      .first
+      .current_for_use
 
     if subscription
       render json: subscription_response(subscription)
@@ -182,7 +175,8 @@ class Account::SubscriptionsController < ApplicationController
         description: subscription.plan.description,
         price: subscription.plan.price,
         promotional_price: subscription.plan.promotional_price,
-        duration_months: subscription.plan.duration_months
+        duration_months: subscription.plan.duration_months,
+        max_owner_sessions: subscription.plan.max_owner_sessions
       }
     }
   end

@@ -381,6 +381,11 @@ const handleLogin = async (otpCode = null) => {
     setTimeout(() => router.push(redirectTo), 600)
 
   } catch (err) {
+    if (['OWNER_SESSION_LIMIT_REACHED', 'STAFF_SESSION_LIMIT_REACHED'].includes(err.response?.data?.code)) {
+      showVerificationModal.value = false
+      errorMsg.value = err.response.data.errors?.[0] || 'Limite de aparelhos conectados atingido. Encerre uma sessão em outro aparelho para entrar.'
+      return
+    }
     failedAttempts.value++
 
     if (failedAttempts.value >= MAX_ATTEMPTS) {
@@ -421,10 +426,11 @@ const handleResendOtp = async () => {
   try {
     await api.post('/devise_users/sign_in', {
       email: form.email.trim().toLowerCase(),
-      password: form.password
+      password: form.password,
+      device_token: getOrCreateDeviceToken()
     })
   } catch (err) {
-    console.error('[Resend OTP] Error:', err)
+    verificationError.value = err.response?.data?.errors?.[0] || 'Não foi possível reenviar o código.'
   }
 }
 </script>

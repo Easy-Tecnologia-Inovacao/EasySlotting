@@ -245,6 +245,10 @@
               </div>
 
               <ul class="plan-features">
+                <li>
+                  <i class="bi bi-check2 text-success me-2"></i>
+                  Até <strong>{{ plan.max_owner_sessions ?? 1 }}</strong> aparelho{{ (plan.max_owner_sessions ?? 1) > 1 ? 's' : '' }} conectado{{ (plan.max_owner_sessions ?? 1) > 1 ? 's' : '' }} por conta do proprietário ou funcionário
+                </li>
                 <li v-if="plan.max_employees">
                   <i class="bi bi-people-fill text-primary"></i>
                   Até <strong>{{ plan.max_employees }}</strong> profissional{{ plan.max_employees > 1 ? 'is' : '' }}
@@ -322,8 +326,8 @@
 import { computed, onMounted, onUnmounted, watch, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useThemeStore } from '@/stores/themeStore'
-import { api } from '@/services/api'
-import { clearStaffAccessToken, getStaffAccessToken } from '@/services/staffAuth'
+import { api, logoutStaff } from '@/services/api'
+import { getStaffAccessToken } from '@/services/staffAuth'
 
 const router = useRouter()
 const store  = useThemeStore()
@@ -378,27 +382,10 @@ const myAccountRoute = computed(() => {
 
 const logout = async () => {
   try {
-    const role = currentUser.value?.role
-    if (role === 'customer') {
-      const slug = localStorage.getItem('customer-slug') || sessionStorage.getItem('customer-slug')
-      if (slug) {
-        await api.delete(`/customer_auth/${slug}/sign_out`)
-      }
-    } else {
-      await api.delete('/devise_users/sign_out')
-    }
+    await logoutStaff()
   } catch {
-    // Ignora se a sessão ou token já expiraram no servidor
+    // A sessão local já foi encerrada mesmo quando a rede está indisponível.
   } finally {
-    ['access-token', 'client', 'uid', 'user'].forEach((k) => {
-      localStorage.removeItem(k)
-      sessionStorage.removeItem(k)
-    })
-    ;['customer-access-token', 'customer-data', 'customer-slug', 'customer-token-expires', 'customer-csrf-token'].forEach((k) => {
-      localStorage.removeItem(k)
-      sessionStorage.removeItem(k)
-    })
-    clearStaffAccessToken()
     refreshAuthState()
     router.push('/')
   }

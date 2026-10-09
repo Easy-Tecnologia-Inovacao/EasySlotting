@@ -107,6 +107,11 @@
 
               <!-- Logs de Segurança -->
               <li class="nav-item">
+                <router-link class="nav-link-sidebar" active-class="active" to="/super-admin/dispositivos" @click="closeSidebarOnMobile">
+                  <i class="bi bi-laptop me-3"></i><span>Dispositivos conectados</span>
+                </router-link>
+              </li>
+              <li class="nav-item">
                 <router-link
                   class="nav-link-sidebar"
                   active-class="active"
@@ -157,8 +162,8 @@
 import { watch, onMounted, ref, computed } from 'vue'
 import { useThemeStore } from '@/stores/themeStore'
 import { useRouter } from 'vue-router'
-import { api } from '@/services/api'
-import { clearStaffAccessToken, getStaffAccessToken } from '@/services/staffAuth'
+import { api, logoutStaff } from '@/services/api'
+import { getStaffAccessToken } from '@/services/staffAuth'
 import { Offcanvas } from 'bootstrap'
 
 const store  = useThemeStore()
@@ -215,33 +220,12 @@ const handleGoToSite = () => {
 }
 
 // ─── Logout ───────────────────────────────────────────────────────────────────
-const clearSession = () => {
-  const keys = [
-    'access-token', 'client', 'uid', 'user', 'establishment-data', 'site-slug',
-    'establishment-permissions', 'salon-config', 'customer-access-token',
-    'customer-data', 'customer-slug', 'customer-token-expires', 'customer-csrf-token'
-  ]
-  keys.forEach((k) => {
-    localStorage.removeItem(k)
-    sessionStorage.removeItem(k)
-  })
-  clearStaffAccessToken()
-}
-
 const logout = async () => {
-  const headers = {
-    'access-token': getStaffAccessToken() || '',
-    'client':       sessionStorage.getItem('client')       || '',
-    'uid':          sessionStorage.getItem('uid')          || ''
-  }
-
   try {
-    await api.delete('/devise_users/sign_out', { headers })
-  } catch (error) {
-    // Sessão já inválida — apenas limpa localmente
-    console.warn('Logout remoto falhou (sessão já expirada):', error?.response?.status)
+    await logoutStaff()
+  } catch {
+    // A sessão local já foi encerrada mesmo quando a rede está indisponível.
   } finally {
-    clearSession()
     router.push('/')
   }
 }

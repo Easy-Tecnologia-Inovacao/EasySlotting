@@ -5,7 +5,7 @@ class Public::PlansController < ApplicationController
   skip_before_action :authenticate_user!, raise: false
 
   def index
-    plans = Plan.where(active: true).order(:price)
+    plans = Plan.where(active: true).in_catalog_order
     render json: plans.map { |plan| serialize(plan) }
   end
 
@@ -27,7 +27,8 @@ class Public::PlansController < ApplicationController
       highlight:                  plan.highlight,
       max_employees:              plan.max_employees,
       max_services:               plan.max_services,
-      max_appointments_per_month: plan.max_appointments_per_month
+      max_appointments_per_month: plan.max_appointments_per_month,
+      max_owner_sessions:         plan.max_owner_sessions
     }
   end
 end

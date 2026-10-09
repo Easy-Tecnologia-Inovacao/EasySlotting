@@ -1,260 +1,177 @@
-﻿import axios from 'axios'
+import axios, { type InternalAxiosRequestConfig } from 'axios'
 import {
-  getCustomerToken,
-  getCustomerCsrfToken,
-  getCustomerSlug,
-  clearCustomerSession,
-  updateAccessToken,
-  isTokenExpiringSoon
+  getCustomerToken, getCustomerCsrfToken, getCustomerSlug, getCustomerSessionVersion,
+  clearCustomerSession, updateAccessToken, isTokenExpiringSoon
 } from '@/services/customerAuth'
-import { clearStaffAccessToken, getStaffAccessToken, setStaffAccessToken } from '@/services/staffAuth'
+import {
+  clearStaffAccessToken, getStaffAccessToken, getStaffSessionVersion, setStaffAccessToken
+} from '@/services/staffAuth'
 import { DEVICE_TOKEN_STORAGE_KEY } from '@/services/storageKeys'
 
-// Utiliza variável de ambiente para a URL da API.
-// Em desenvolvimento, se não houver VITE_API_URL, detecta o host atual para facilitar acesso via IP/Mobile.
 const host = window.location.hostname
-const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1'
-const defaultURL = isLocal
-  ? 'http://localhost:3000/api'
-  : `${window.location.protocol}//${host}:3000/api`
-
+const isLocal = ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(host)
+const defaultURL = import.meta.env.PROD ? '/api'
+  : isLocal ? 'http://localhost:3000/api' : window.location.protocol + '//' + host + ':3000/api'
 const baseURL = import.meta.env.VITE_API_URL || defaultURL
-
 export const api = axios.create({
-  baseURL,
-  headers: {
-    'Content-Type': 'application/json',
-    Accept: 'application/json'
-  },
-  withCredentials: true // Necessário para enviar cookies httpOnly
+  baseURL, headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, withCredentials: true
 })
 
-// ─── Fila de requests durante refresh ────────────────────────────────────────
-let isRefreshing = false
-let failedQueue: Array<{
-  resolve: (token: string) => void
-  reject: (error: any) => void
-}> = []
-
-const processQueue = (error: any, token: string | null = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error)
-    } else {
-      prom.resolve(token!)
-    }
-  })
-  failedQueue = []
+type AuthRequest = InternalAxiosRequestConfig & {
+  _staffVersion?: number
+  _customerVersion?: number
+  _retry?: boolean
 }
+const isCustomerRoute = (url: string) => /^\/(customer|customer_auth)\//.test(url)
+const isCustomerProtected = (url: string) => url.startsWith('/customer/')
+const isPublicAuth = (url: string) => url === '/owner_onboarding' ||
+  /\/(sign_in|sign_up|forgot_password|reset_password|password)$/.test(url)
 
-// ─── Device Token (OWASP Trusted Device / Resiliência a IP Rotativo) ─────────
 export const getOrCreateDeviceToken = (): string => {
   let token = localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY)
-  if (!token) {
-    token = typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : 'dt_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
+  if (!token || !/^[a-zA-Z0-9_-]{8,64}$/.test(token)) {
+    // getRandomValues também funciona nos testes LAN por HTTP.
+    const bytes = crypto.getRandomValues(new Uint8Array(32))
+    token = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
     localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token)
   }
   return token
 }
 
-// ─── Request: injeta token correto por rota ───────────────────────────────────
-api.interceptors.request.use(async (config) => {
+let refreshPromise: Promise<string> | null = null
+let refreshVersion = -1
+function refreshAccessToken(): Promise<string> {
+  const version = getCustomerSessionVersion()
+  if (refreshPromise && refreshVersion === version) return refreshPromise
+  const slug = getCustomerSlug()
+  const csrf = getCustomerCsrfToken()
+  if (!slug || !csrf || !getCustomerToken()) return Promise.reject(new Error('Sessão indisponível'))
+  refreshVersion = version
+  const pending = axios.post(baseURL + '/customer_auth/' + encodeURIComponent(slug) + '/refresh', {}, {
+    headers: { 'X-CSRF-Token': csrf }, withCredentials: true
+  }).then(({ data }) => {
+    if (version !== getCustomerSessionVersion()) throw new axios.CanceledError('Sessão encerrada')
+    updateAccessToken(data.access_token, data.csrf_token, data.expires_in)
+    return data.access_token as string
+  })
+  refreshPromise = pending
+  const release = () => { if (refreshPromise === pending) refreshPromise = null }
+  pending.then(release, release)
+  return pending
+}
+
+function expireCustomerSession(): void {
+  const slug = getCustomerSlug()
+  clearCustomerSession()
+  window.location.assign(slug ? '/empresa/' + encodeURIComponent(slug) + '/login' : '/cliente/login')
+}
+
+api.interceptors.request.use(async (input) => {
+  const config = input as AuthRequest
   const url = config.url || ''
-
-  // Rotas de customer usam Bearer JWT (token próprio por estabelecimento)
-  const isCustomerRoute =
-    url.includes('/customer/') ||
-    url.includes('/customer_auth/')
-
-  if (isCustomerRoute) {
-    // Verifica se o token está expirando e tenta refresh antes de fazer a request
-    if (isTokenExpiringSoon() && !url.includes('/customer_auth/refresh')) {
-      try {
-        await refreshAccessToken()
-      } catch {
-        // Se o refresh falhar, deixa a request seguir (será tratada no response)
-      }
-    }
-
-    const customerToken = getCustomerToken()
-    if (customerToken) {
-      config.headers = config.headers ?? axios.AxiosHeaders.from({})
-      config.headers.set('Authorization', `Bearer ${customerToken}`)
-    }
+  if (isPublicAuth(url)) {
+    // Credenciais de outra conta não acompanham login/cadastro/recuperação.
+    for (const header of ['Authorization', 'access-token', 'client', 'uid']) config.headers.delete(header)
     return config
   }
-
-  // Rotas staff usam Devise Token Auth via headers (cookies httpOnly para refresh)
-  const accessToken = getStaffAccessToken() || ''
-
-  const client =
-    localStorage.getItem('client') ||
-    sessionStorage.getItem('client') ||
-    ''
-
-  const uid =
-    localStorage.getItem('uid') ||
-    sessionStorage.getItem('uid') ||
-    ''
-
-  config.headers = config.headers ?? axios.AxiosHeaders.from({})
-
-  if (accessToken) config.headers.set('access-token', accessToken)
-  if (client)      config.headers.set('client', client)
-  if (uid)         config.headers.set('uid', uid)
-
+  if (isCustomerRoute(url)) {
+    if (config._customerVersion !== undefined && config._customerVersion !== getCustomerSessionVersion()) {
+      throw new axios.CanceledError('Sessão encerrada')
+    }
+    config._customerVersion = getCustomerSessionVersion()
+    if (isCustomerProtected(url) && getCustomerToken() && isTokenExpiringSoon()) {
+      try { await refreshAccessToken() } catch (error) {
+        if (config._customerVersion !== getCustomerSessionVersion()) throw new axios.CanceledError('Sessão encerrada')
+        // Falha de rede não apaga uma sessão ainda válida; o servidor valida o access token.
+        if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status || 0)) {
+          expireCustomerSession()
+          throw error
+        }
+      }
+    }
+    if (config._customerVersion !== getCustomerSessionVersion()) throw new axios.CanceledError('Sessão encerrada')
+    const token = getCustomerToken()
+    if (token) config.headers.set('Authorization', 'Bearer ' + token)
+    if (getCustomerCsrfToken()) config.headers.set('X-CSRF-Token', getCustomerCsrfToken()!)
+    return config
+  }
+  config._staffVersion = getStaffSessionVersion()
+  const token = getStaffAccessToken()
+  if (token) {
+    config.headers.set('access-token', token)
+    config.headers.set('client', sessionStorage.getItem('client') || '')
+    config.headers.set('uid', sessionStorage.getItem('uid') || '')
+  }
   return config
 })
 
-// ─── Response: atualiza tokens e trata erros globais ──────────────────────────
-api.interceptors.response.use(
-  (response) => {
-    // Atualiza tokens rotativos (Devise Token Auth)
-    const url = response.config.url || ''
-    const isCustomerRoute =
-      url.includes('/customer/') || url.includes('/customer_auth/')
-
-    // Apenas para rotas que NÃO são de cliente (pois clientes usam JWT fixo)
-    if (!isCustomerRoute) {
-      const accessToken = response.headers['access-token'] || response.headers['Access-Token']
-      const client      = response.headers['client']       || response.headers['Client']
-      const uid         = response.headers['uid']          || response.headers['Uid']
-
-      if (accessToken && client && uid) {
-        setStaffAccessToken(accessToken)
-        sessionStorage.setItem('client', client)
-        sessionStorage.setItem('uid', uid)
-      }
+api.interceptors.response.use((response) => {
+  const config = response.config as AuthRequest
+  // Uma resposta atrasada não pode recriar a sessão após logout ou troca de conta.
+  if (!isCustomerRoute(config.url || '') && !isPublicAuth(config.url || '') &&
+      config._staffVersion === getStaffSessionVersion() && getStaffAccessToken()) {
+    const token = String(response.headers['access-token'] || '').trim()
+    const client = response.headers['client']
+    const uid = response.headers['uid']
+    if (token && client && uid) {
+      setStaffAccessToken(token)
+      sessionStorage.setItem('client', client)
+      sessionStorage.setItem('uid', uid)
     }
-
-    return response
-  },
-  async (error) => {
-    const originalRequest = error.config
-    const url = error.config?.url || ''
-
-    // ─── Tratamento 401 para rotas de customer ────────────────────────────────
-    const isCustomerRoute =
-      url.includes('/customer/') || url.includes('/customer_auth/')
-
-    if (error.response?.status === 401 && isCustomerRoute) {
-      // Se já estamos tentando refresh, cola na fila
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject })
-        }).then((token) => {
-          originalRequest.headers.Authorization = `Bearer ${token}`
-          return api(originalRequest)
-        })
-      }
-
-      // Se é a rota de refresh que falhou, limpa sessão
-      if (url.includes('/customer_auth/') && url.includes('/refresh')) {
-        clearCustomerSession()
-        const slug = getCustomerSlug() || ''
-        window.location.href = slug ? `/empresa/${slug}/login` : '/sistema/login'
-        return Promise.reject(error)
-      }
-
-      // Se é a rota de login que falhou, não faz refresh
-      if (url.includes('/customer_auth/') && url.includes('/sign_in')) {
-        return Promise.reject(error)
-      }
-
-      // Se tem access token, tenta fazer refresh (o cookie httpOnly vai automaticamente)
-      if (!originalRequest._retry) {
-        originalRequest._retry = true
-        isRefreshing = true
-
-        try {
-          const newTokens = await refreshAccessToken()
-          processQueue(null, newTokens.access_token)
-
-          originalRequest.headers.Authorization = `Bearer ${newTokens.access_token}`
-          return api(originalRequest)
-        } catch (refreshError) {
-          processQueue(refreshError, null)
-          clearCustomerSession()
-          const slug = getCustomerSlug() || ''
-          window.location.href = slug ? `/empresa/${slug}/login` : '/sistema/login'
-          return Promise.reject(refreshError)
-        } finally {
-          isRefreshing = false
-        }
-      }
-
-      // Sem possibilidade de refresh — limpa sessão
-      clearCustomerSession()
-      const slug = getCustomerSlug() || ''
-      window.location.href = slug ? `/empresa/${slug}/login` : '/sistema/login'
-    }
-
-    // ─── Tratamento 401 para rotas de staff (Devise) ─────────────────────────
-    if (error.response?.status === 401 && !isCustomerRoute) {
-      const accessToken = error.config?.headers?.['access-token'] || ''
-
-      // Se for falha no próprio login, não redireciona
-      if (url.includes('sign_in')) {
-        return Promise.reject(error)
-      }
-
-      let role = localStorage.getItem('role') || sessionStorage.getItem('role')
-      if (!role) {
-        const userStr = localStorage.getItem('user') || sessionStorage.getItem('user')
-        if (userStr) {
-          try { role = JSON.parse(userStr).role } catch { role = '' }
-        }
-      }
-
-      const keys = ['access-token', 'client', 'uid', 'role', 'token-type', 'user', 'site-slug']
-      keys.forEach((key) => {
-        localStorage.removeItem(key)
-        sessionStorage.removeItem(key)
-      })
-      clearStaffAccessToken()
-
-      if (!role || role === 'customer') {
-        const urlMatch = window.location.pathname.match(/\/empresa\/([^/]+)/)
-        const urlSlug  = urlMatch ? urlMatch[1] : ''
-        window.location.href = urlSlug ? `/empresa/${urlSlug}/login` : '/sistema/login'
-      } else {
-        window.location.href = '/sistema/login'
-      }
-    }
-
-    return Promise.reject(error)
   }
-)
+  return response
+}, async (error) => {
+  const config = error.config as AuthRequest | undefined
+  if (!config || error.response?.status !== 401 || isPublicAuth(config.url || '')) return Promise.reject(error)
+  if (isCustomerRoute(config.url || '')) {
+    if (config._customerVersion !== getCustomerSessionVersion() || !getCustomerToken()) return Promise.reject(error)
+    if (isCustomerProtected(config.url || '') && !config._retry) {
+      config._retry = true
+      try {
+        const token = await refreshAccessToken()
+        config.headers.set('Authorization', 'Bearer ' + token)
+        return api.request(config)
+      } catch (refreshError) {
+        if (config._customerVersion === getCustomerSessionVersion() &&
+            axios.isAxiosError(refreshError) && [401, 403].includes(refreshError.response?.status || 0)) expireCustomerSession()
+        return Promise.reject(refreshError)
+      }
+    }
+    expireCustomerSession()
+  } else if (config._staffVersion === getStaffSessionVersion() && getStaffAccessToken()) {
+    clearStaffAccessToken()
+    window.location.assign('/sistema/login')
+  }
+  return Promise.reject(error)
+})
 
-// ─── Refresh Token Helper ────────────────────────────────────────────────────
+/** Captura as credenciais e encerra a sessão local antes de aguardar a rede. */
+export async function logoutStaff(): Promise<void> {
+  const headers = {
+    'access-token': getStaffAccessToken() || '', client: sessionStorage.getItem('client') || '',
+    uid: sessionStorage.getItem('uid') || ''
+  }
+  clearStaffAccessToken()
+  await axios.delete(baseURL + '/devise_users/sign_out', { headers, withCredentials: true })
+}
 
-async function refreshAccessToken(): Promise<{ access_token: string }> {
+export async function logoutCustomer(): Promise<void> {
   const slug = getCustomerSlug()
-  const csrfToken = getCustomerCsrfToken()
+  const token = getCustomerToken()
+  const csrf = getCustomerCsrfToken()
+  clearCustomerSession()
+  if (!slug) return
+  await axios.delete(baseURL + '/customer_auth/' + encodeURIComponent(slug) + '/sign_out', {
+    headers: { Authorization: token ? 'Bearer ' + token : '', 'X-CSRF-Token': csrf || '' }, withCredentials: true
+  })
+}
 
-  if (!slug) {
-    throw new Error('No establishment slug available')
-  }
-
-  // O cookie httpOnly é enviado automaticamente com withCredentials: true
-  const response = await axios.post(
-    `${baseURL}/customer_auth/${slug}/refresh`,
-    {},
-    {
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': csrfToken || ''
-      },
-      withCredentials: true
-    }
-  )
-
-  const { access_token, csrf_token, expires_in } = response.data
-
-  // Atualiza o access token e CSRF token no storage
-  updateAccessToken(access_token, csrf_token, expires_in)
-
-  return { access_token }
+/** Exclui a própria conta e limpa a sessão antes de sair da página. */
+export async function deleteCustomerAccount(confirmation: string, currentPassword: string): Promise<string> {
+  const version = getCustomerSessionVersion()
+  const slug = getCustomerSlug()
+  await api.delete('/customer/profile', { data: { confirmation, current_password: currentPassword } })
+  if (version !== getCustomerSessionVersion()) throw new axios.CanceledError('Sessão encerrada')
+  clearCustomerSession()
+  return slug ? '/empresa/' + encodeURIComponent(slug) : '/'
 }

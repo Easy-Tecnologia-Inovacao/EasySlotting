@@ -35,8 +35,8 @@ class DeviseUsers::RegistrationsController < DeviseTokenAuth::RegistrationsContr
 
   protected
 
-  def render_create_success
-    @resource.add_trusted_ip!(request.remote_ip)
-    super
+  # O cadastro não emite tokens; a autenticação passa pelo controller de login/OTP.
+  def active_for_authentication?
+    false
   end
 end

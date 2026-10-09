@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { isCustomerLoggedIn } from '@/services/customerAuth'
+import { isCustomerLoggedIn, getCustomerSlug } from '@/services/customerAuth'
 import { getStaffAccessToken } from '@/services/staffAuth'
 
 // MAIN SISTEMA (LANDING)
@@ -32,6 +32,7 @@ import AdminTeamPage from '@/views/admin/TeamPage/AdminTeamPage.vue'
 import AdminWorkingHoursPage from '@/views/admin/WorkingHoursPage/AdminWorkingHoursPage.vue'
 import AdminAppointmentsPage from '@/views/admin/AppointmentsPage/AdminAppointmentsPage.vue'
 import AdminPlansPage from '@/views/admin/PlansPage/AdminPlansPage.vue'
+import AdminSessionsPage from '@/views/admin/SessionsPage/AdminSessionsPage.vue'
 import AdminAppearancePage from '@/views/admin/AppearancePage/AdminAppearancePage.vue'
 
 // FINANCIAL
@@ -45,6 +46,7 @@ import AdminFinancialServicesPage from '@/views/admin/Financial/ServicesPage/Adm
 import SuperAdminPlansPage from '@/views/super-admin/PlansPage/SuperAdminPlansPage.vue'
 import SuperAdminDashboardPage from '@/views/super-admin/DashboardPage/SuperAdminDashboardPage.vue'
 import SuperAdminSecurityLogsPage from '@/views/super-admin/SecurityLogsPage/SuperAdminSecurityLogsPage.vue'
+import SuperAdminSessionsPage from '@/views/super-admin/SessionsPage/SuperAdminSessionsPage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -243,12 +245,22 @@ const router = createRouter({
       component: AdminPlansPage
     },
     {
+      path: '/admin/dispositivos',
+      name: 'admin-dispositivos',
+      component: AdminSessionsPage
+    },
+    {
       path: '/admin/aparencia',
       name: 'admin-aparencia',
       component: AdminAppearancePage
     },
 
     // SUPER ADMIN
+    {
+      path: '/super-admin/dispositivos',
+      name: 'super-admin-dispositivos',
+      component: SuperAdminSessionsPage
+    },
     {
       path: '/super-admin/dashboard',
       name: 'super-admin-dashboard',
@@ -419,7 +431,7 @@ router.beforeEach((to) => {
     to.path.startsWith('/empresa/meus-pacotes') ||
     to.path.match(/^\/empresa\/[^/]+\/(minha-conta|meus-agendamentos|historico|meus-pacotes)/)
   ) {
-    if (!isCustomerLoggedIn()) {
+    if (!isCustomerLoggedIn() || (to.params.slug && to.params.slug !== getCustomerSlug())) {
       const slug =
         (to.params.slug as string) ||
         localStorage.getItem('site-slug') ||
@@ -438,7 +450,7 @@ router.beforeEach((to) => {
 
   // BLOQUEIO LOGIN CLIENTE — usa token JWT do customer (não Devise)
   if (to.path === '/cliente/login' || to.path.match(/\/empresa\/[^/]+\/login$/)) {
-    if (isCustomerLoggedIn()) {
+    if (isCustomerLoggedIn() && (!to.params.slug || to.params.slug === getCustomerSlug())) {
       const slug =
         localStorage.getItem('site-slug') ||
         sessionStorage.getItem('site-slug') ||

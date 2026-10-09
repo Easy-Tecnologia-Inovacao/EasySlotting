@@ -68,6 +68,9 @@ class SecurityHardeningTest < ActionDispatch::IntegrationTest
   private
 
   def auth_headers(user)
-    user.create_new_auth_token.merge('X-Establishment-ID' => @establishment.id.to_s)
+    @auth_clients ||= {}
+    headers = user.reload.create_new_auth_token(@auth_clients[user.id])
+    @auth_clients[user.id] = headers['client']
+    headers.merge('X-Establishment-ID' => @establishment.id.to_s)
   end
 end

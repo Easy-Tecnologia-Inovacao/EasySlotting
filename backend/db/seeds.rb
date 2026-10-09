@@ -60,24 +60,16 @@ puts 'Criando Super Admin...'
 # 1. SUPER ADMIN - Administrador Geral do Sistema
 # Esse usuário acessa o painel de administração global (Planos, etc.)
 # =========================================================
+admin_email = ENV.fetch('BOOTSTRAP_ADMIN_EMAIL', 'admin@example.test').strip.downcase
+admin_password = ENV['BOOTSTRAP_ADMIN_PASSWORD'].presence || "#{SecureRandom.hex(24)}Z9!"
+puts 'Para acessar o super admin do seed, configure BOOTSTRAP_ADMIN_EMAIL/PASSWORD antes de executar; a senha não é exibida.'
 super_admin = User.create!(
   name: 'Super Admin',
-  email: 'jonathanws.willian@gmail.com',
-  password: 'Slot@2024',
-  password_confirmation: 'Slot@2024',
+  email: admin_email,
+  password: admin_password,
+  password_confirmation: admin_password,
   role: 'super_admin',
-  uid: 'jonathanws.willian@gmail.com',
-  provider: 'email',
-  active: true
-)
-
-super_admin_sys = User.create!(
-  name: 'Administração EasySloting',
-  email: 'easysloting.sistema@gmail.com',
-  password: 'Slot@2024',
-  password_confirmation: 'Slot@2024',
-  role: 'super_admin',
-  uid: 'easysloting.sistema@gmail.com',
+  uid: admin_email,
   provider: 'email',
   active: true
 )
@@ -342,7 +334,7 @@ ServicePackageUsage.create!(service_package_sale: venda_pacote_est1, appointment
 puts '==========================================='
 puts '             RESUMO DOS ACESSOS            '
 puts '==========================================='
-puts '*** SENHA PADRÃO PARA TODOS: Slot@2024 ***'
+puts 'Super admin usa BOOTSTRAP_ADMIN_PASSWORD; as demais contas são demonstrações locais.'
 puts ''
 puts '--- SUPER ADMIN (Acesso ao Painel Geral de Super Admin) ---'
 puts "Email: #{super_admin.email}"

@@ -4,8 +4,10 @@ module SuperAdmin
     before_action :require_super_admin!
     before_action :set_plan, only: [:update]
 
+    rescue_from ActiveRecord::RecordNotUnique, with: :render_plan_conflict
+
     def index
-      render json: Plan.order(:created_at)
+      render json: Plan.in_catalog_order
     end
 
     def create
@@ -57,6 +59,12 @@ module SuperAdmin
 
     private
 
+    def render_plan_conflict
+      render json: {
+        error: 'Já existe um plano ativo com esse limite de sessões ou um plano com esse código. Atualize a lista e escolha valores disponíveis.'
+      }, status: :unprocessable_entity
+    end
+
     def set_plan
       @plan = Plan.find(params[:id])
     end
@@ -72,6 +80,7 @@ module SuperAdmin
         :max_employees,
         :max_services,
         :max_appointments_per_month,
+        :max_owner_sessions,
         :active,
         :promotional_price,
         :discount_percentage,

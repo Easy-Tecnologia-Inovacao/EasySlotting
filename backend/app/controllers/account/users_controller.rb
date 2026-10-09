@@ -254,7 +254,8 @@ class Account::UsersController < ApplicationController
   # GET /api/me/sessions
   def sessions
     current_client = request.headers['client']
-    tokens = current_user.tokens || {}
+    policy = OwnerSessionPolicy.new(current_user)
+    tokens = policy.permitted_tokens
 
     session_list = tokens.map do |client_id, data|
       {
@@ -263,21 +264,28 @@ class Account::UsersController < ApplicationController
         device: data['name'] || 'Dispositivo Desconhecido',
         ip: data['ip'],
         user_agent: data['ua'],
-        last_seen_at: data['last_seen_at'] ? Time.at(data['last_seen_at']).iso8601 : nil
+        last_seen_at: data['last_seen_at'] ? Time.at(data['last_seen_at']).iso8601 : nil,
+        created_at: data['issued_at'] ? Time.at(data['issued_at']).iso8601 : nil,
+        expires_at: Time.at(data['expiry'].to_i).iso8601
       }
     end.sort_by { |s| s[:is_current] ? 0 : 1 }
 
-    render json: { sessions: session_list }, status: :ok
+    render json: { sessions: session_list, limit: policy&.limit, active_count: session_list.size }, status: :ok
   end
 
   # DELETE /api/me/sessions/:client_id
   def destroy_session
     client_id_to_remove = params[:client_id]
-    tokens = (current_user.tokens || {}).dup
+    removed = current_user.with_lock do
+      tokens = (current_user.tokens || {}).dup
+      if tokens.key?(client_id_to_remove)
+        tokens.delete(client_id_to_remove)
+        current_user.update_columns(tokens: tokens)
+        true
+      end
+    end
 
-    if tokens.key?(client_id_to_remove)
-      tokens.delete(client_id_to_remove)
-      current_user.update_columns(tokens: tokens)
+    if removed
 
       AuditLogger.log(
         action: 'session_revoked',
@@ -296,16 +304,11 @@ class Account::UsersController < ApplicationController
   # DELETE /api/me/sessions
   def destroy_other_sessions
     current_client = request.headers['client']
-    tokens = (current_user.tokens || {}).dup
-
-    if current_client.present? && tokens.key?(current_client)
-      current_session = tokens[current_client]
-      tokens = { current_client => current_session }
-    else
-      tokens = {}
+    current_user.with_lock do
+      tokens = (current_user.tokens || {}).dup
+      tokens = current_client.present? && tokens.key?(current_client) ? { current_client => tokens[current_client] } : {}
+      current_user.update_columns(tokens: tokens)
     end
-
-    current_user.update_columns(tokens: tokens)
 
     AuditLogger.log(
       action: 'other_sessions_revoked',

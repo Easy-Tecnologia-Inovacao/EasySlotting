@@ -94,6 +94,9 @@ Rails.application.routes.draw do
     # CLIENTE (LOGADO) - (Mapeados para a pasta customer/)
     # =========================
     namespace :customer do
+      resources :sessions, only: [:index, :destroy] do
+        delete :destroy_others, on: :collection
+      end
       resource :profile, controller: 'profile', only: [:show, :update, :destroy] do
         post :upload_image
         post :change_password

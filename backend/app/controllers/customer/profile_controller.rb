@@ -209,57 +209,46 @@ class Customer::ProfileController < ApplicationController
 
   # DELETE /api/customer/profile
   def destroy
-    # Validação de segurança: confirmação obrigatória
-    if params[:confirmation] != current_customer.email
-      return render json: {
-        error: 'Confirmação inválida. Digite seu e-mail para confirmar.'
-      }, status: :unprocessable_entity
+    confirmation = params[:confirmation]
+    password = params[:current_password]
+    unless confirmation.is_a?(String) && confirmation.bytesize.between?(1, 254) &&
+           password.is_a?(String) && password.bytesize.between?(1, 128)
+      return render json: { error: 'Informe seu e-mail e sua senha atual para excluir a conta.' },
+                    status: :unprocessable_entity
     end
 
-    customer_name = current_customer.name
-    customer_email = current_customer.email
-
-    # Auditoria antes da exclusão
-    AuditLogger.log(
-      action: 'account_deleted',
-      user: current_customer,
-      establishment: current_customer.establishment,
-      ip: request.remote_ip,
-      user_agent: request.user_agent,
-      details: {
-        event: 'account_deleted',
-        customer_name: customer_name,
-        customer_email: customer_email
-      }
+    result = CustomerAccountDeletion.call(
+      customer: current_customer, session_id: current_customer_session.session_id,
+      confirmation: confirmation, password: password,
+      ip: request.remote_ip, user_agent: request.user_agent
     )
+    # Esses cookies não acompanham /customer/profile por causa do Path.
+    # CookieJar#delete ignora cookies ausentes da requisição; a resposta deve
+    # emitir a expiração explicitamente no path original e no path legado.
+    response.delete_cookie(:refresh_token, path: '/api/customer_auth')
+    response.delete_cookie(:csrf_token, path: '/api/customer_auth')
+    response.delete_cookie(:csrf_token, path: '/')
 
-    # Cancela agendamentos pendentes
-    current_customer.appointments
-      .where(status: %w[pending confirmed])
-      .update_all(status: 'canceled')
-
-    # Cancela pacotes ativos
-    current_customer.service_package_sales
-      .where(status: 'active')
-      .update_all(status: 'canceled')
-
-    # Remove dados sensíveis e soft delete
-    current_customer.update!(
-      name: 'Conta Excluída',
-      email: "deleted_#{current_customer.id}_#{Time.current.to_i}@deleted.local",
-      phone: nil,
-      cellphone: nil,
-      image: nil,
-      password_digest: nil,
-      active: false,
-      refresh_token: nil,
-      refresh_token_expires_at: nil
-    )
-
+    if result[:avatar].present?
+      begin
+        PurgeCustomerAvatarJob.perform_later(current_customer.id, result[:avatar])
+      rescue StandardError => e
+        # A conta já foi excluída. Falha de fila não deve prometer rollback do banco.
+        Rails.logger.error("[CustomerAvatarPurge] Falha de enfileiramento: #{e.class}")
+      end
+    end
     render json: { message: 'Conta excluída com sucesso.' }, status: :ok
-  rescue => e
-    Rails.logger.error("[Customer::ProfileController#destroy] #{e.class}: #{e.message}")
-    render json: { error: 'Não foi possível excluir a conta. Tente novamente.' }, status: :unprocessable_entity
+  rescue CustomerAccountDeletion::InvalidConfirmation
+    render json: { error: 'Confirmação inválida. Digite seu e-mail para confirmar.' }, status: :unprocessable_entity
+  rescue CustomerAccountDeletion::InvalidPassword
+    render json: { error: 'Senha atual incorreta.' }, status: :unprocessable_entity
+  rescue CustomerAccountDeletion::AccountLocked
+    render json: { error: 'Conta bloqueada. Aguarde 30 minutos antes de tentar novamente.' }, status: :too_many_requests
+  rescue CustomerAccountDeletion::InvalidSession
+    render json: { error: 'Sessão inválida. Faça login novamente.' }, status: :unauthorized
+  rescue StandardError => e
+    Rails.logger.error("[Customer::ProfileController#destroy] #{e.class}")
+    render json: { error: 'Não foi possível excluir a conta. Tente novamente.' }, status: :internal_server_error
   end
 
   # PATCH /api/customer/profile/revoke_consent
@@ -326,7 +315,7 @@ class Customer::ProfileController < ApplicationController
 
   # GET /api/customer/profile/sessions
   def sessions
-    # Retorna informações sobre sessões ativas (últimos logins)
+    # Histórico de auditoria. Sessões vigentes ficam em /customer/sessions.
     recent_logs = AuditLog.where(
       establishment_id: current_customer.establishment_id,
       action: %w[login_success login_failure],

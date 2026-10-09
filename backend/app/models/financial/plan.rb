@@ -2,6 +2,9 @@ class Plan < ApplicationRecord
   has_many :subscriptions, dependent: :restrict_with_exception
 
   before_validation :sanitize_data
+  before_validation :lock_catalog_validation, prepend: true
+
+  scope :in_catalog_order, -> { order(:price, :id) }
 
   # Campos de texto — limites de comprimento e formato
   validates :name,
@@ -54,8 +57,18 @@ class Plan < ApplicationRecord
             numericality: { only_integer: true, greater_than_or_equal_to: 0 },
             allow_nil: true
 
+  validates :max_owner_sessions,
+            presence: true,
+            numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 4 }
+  validates :max_owner_sessions,
+            uniqueness: {
+              conditions: -> { where(active: true) },
+              message: 'já está em uso por outro plano ativo. Escolha um limite disponível de 1 a 4.'
+            }, if: :active?
+
   validate :code_immutable_if_subscribed, on: :update
   validate :promotional_price_must_be_less_than_regular_price
+  validate :catalog_must_increase_in_creation_order
 
   before_validation :calculate_promotion_end_date
   before_validation :calculate_discount_percentage
@@ -76,6 +89,44 @@ class Plan < ApplicationRecord
   end
 
   private
+
+  def lock_catalog_validation
+    # Save já mantém a transação até a gravação final. Com valid? isolado,
+    # o lock termina na própria consulta e não reserva uma futura gravação.
+    # Funciona mesmo com catálogo vazio e serializa os saves entre processos.
+    self.class.connection.execute('SELECT pg_advisory_xact_lock(1163086932, 1347174734)')
+    if persisted?
+      # O controller pode ter lido esta linha antes de outro editor terminar.
+      # Atualiza campos não editados sem converter entradas inválidas (ex.: 2.5).
+      pending_names = attribute_names.select do |name|
+        public_send("#{name}_came_from_user?") || will_save_change_to_attribute?(name)
+      end
+      pending_attributes = attributes_before_type_cast.slice(*pending_names)
+      reload
+      assign_attributes(pending_attributes)
+    end
+  end
+
+  def catalog_must_increase_in_creation_order
+    return unless active? && errors[:price].empty? && errors[:max_owner_sessions].empty?
+
+    others = self.class.where(active: true).where.not(id: id)
+    # IDs são atribuídos pelo banco: o payload não escolhe a posição do plano.
+    previous_plans = persisted? ? others.where('id < ?', id) : others
+    following_plans = persisted? ? others.where('id > ?', id) : others.none
+    if previous_plans.where('price >= ?', price).exists?
+      errors.add(:price, 'deve ser maior que o preço normal dos planos ativos cadastrados antes deste.')
+    end
+    if following_plans.where('price <= ?', price).exists?
+      errors.add(:price, 'deve ser menor que o preço normal dos planos ativos cadastrados depois deste.')
+    end
+    if previous_plans.where('max_owner_sessions >= ?', max_owner_sessions).exists?
+      errors.add(:max_owner_sessions, 'deve ser maior que a quantidade dos planos ativos cadastrados antes deste.')
+    end
+    if following_plans.where('max_owner_sessions <= ?', max_owner_sessions).exists?
+      errors.add(:max_owner_sessions, 'deve ser menor que a quantidade dos planos ativos cadastrados depois deste.')
+    end
+  end
 
   def code_immutable_if_subscribed
     if code_changed? && subscriptions.exists?

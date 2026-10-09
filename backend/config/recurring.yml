@@ -1,6 +1,10 @@
 # Configurações de jobs agendados para produção.
 # Requer SOLID_QUEUE_IN_PUMA=true ou processo bin/jobs separado.
 production:
+  purge_expired_customer_sessions:
+    class: PurgeExpiredCustomerSessionsJob
+    queue: default
+    schedule: every hour at minute 25
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
@@ -16,6 +20,10 @@ production:
     schedule: every hour at minute 5
 
 development:
+  purge_expired_customer_sessions:
+    class: PurgeExpiredCustomerSessionsJob
+    queue: default
+    schedule: every hour at minute 25
   appointment_reminder:
     class: AppointmentReminderJob
     queue: default

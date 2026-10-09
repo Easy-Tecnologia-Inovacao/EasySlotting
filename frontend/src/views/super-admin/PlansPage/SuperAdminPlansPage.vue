@@ -14,13 +14,22 @@
             </p>
           </div>
           <div class="col-12 col-xl-4 text-xl-end">
-            <button class="btn btn-primary rounded-3 fw-semibold px-4 py-2 shadow-sm" @click="openCreateModal">
+            <button class="btn btn-primary rounded-3 fw-semibold px-4 py-2 shadow-sm" :disabled="loading || saving || catalogFull" @click="openCreateModal">
               <i class="bi bi-plus-lg me-2"></i>
               Novo plano
             </button>
           </div>
         </div>
       </section>
+
+      <div v-if="!loading" class="alert alert-info rounded-4">
+        <strong>{{ activePlanCount }} de 4 faixas de plano em uso.</strong>
+        Cada plano ativo tem um limite exclusivo de 1, 2, 3 ou 4 sessões por conta de proprietário ou funcionário.
+        Você pode usar só as faixas que desejar; não precisa criar quatro planos nem oferecer quatro sessões.
+        Cadastre do menor para o maior: cada novo plano ativo deve ter preço normal e sessões maiores que os anteriores.
+        Um upgrade substitui o limite anterior, sem somar sessões.
+        <span v-if="catalogFull">O maior plano já oferece 4 sessões. Edite ou inative esse plano antes de cadastrar um superior.</span>
+      </div>
 
       <div v-if="loading" class="text-center py-5">
         <div class="spinner-border" role="status"></div>
@@ -36,6 +45,7 @@
                   <th class="px-4 py-3">Plano</th>
                   <th class="py-3">Preço</th>
                   <th class="py-3">Duração</th>
+                  <th class="py-3">Sessões do proprietário</th>
                   <th class="py-3">Status</th>
                   <th class="py-3">Promoção</th>
                   <th class="py-3 text-end pe-4">Ações</th>
@@ -61,6 +71,8 @@
                   </td>
 
                   <td>{{ periodLabel(plan.duration_months) }}</td>
+
+                  <td>{{ plan.max_owner_sessions ?? 1 }} {{ (plan.max_owner_sessions ?? 1) === 1 ? 'sessão' : 'sessões' }}</td>
 
                   <td>
                     <span
@@ -91,7 +103,7 @@
                 </tr>
 
                 <tr v-if="plans.length === 0">
-                  <td colspan="6" class="text-center py-5 text-secondary">
+                  <td colspan="7" class="text-center py-5 text-secondary">
                     Nenhum plano encontrado.
                   </td>
                 </tr>
@@ -218,6 +230,7 @@
                 <div class="form-text">
                   <i class="bi bi-info-circle me-1"></i>
                   Valor cobrado por período. Deve ser maior que zero.
+                  Respeite a ordem crescente dos planos; promoções não alteram essa ordem.
                 </div>
               </div>
 
@@ -251,7 +264,7 @@
               <i class="bi bi-sliders text-warning me-2"></i>
               Limites do Plano
               <span class="badge rounded-pill bg-secondary bg-opacity-25 text-secondary border border-secondary border-opacity-25 ms-2 fw-normal small">
-                Deixe em branco para ilimitado
+                Campos opcionais em branco: ilimitado
               </span>
             </div>
             <div class="row g-3 mt-1">
@@ -299,6 +312,23 @@
                   placeholder="Ilimitado"
                 />
                 <div class="form-text">Limite de atendimentos confirmados por mês calendário.</div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label class="form-label fw-semibold" for="ownerSessionLimit">
+                  <i class="bi bi-laptop me-1 text-secondary"></i>
+                  Aparelhos simultâneos por conta da equipe <span class="text-danger">*</span>
+                </label>
+                <select id="ownerSessionLimit" v-model.number="form.max_owner_sessions" class="form-select rounded-3">
+                  <option v-for="limit in 4" :key="limit" :value="limit" :disabled="form.active && (isSessionLimitUsed(limit) || isSessionLimitOutOfOrder(limit))">
+                    {{ limit }} {{ limit === 1 ? 'sessão' : 'sessões' }}{{ form.active && isSessionLimitUsed(limit) ? ' — em uso por outro plano' : form.active && isSessionLimitOutOfOrder(limit) ? ' — fora da ordem crescente' : '' }}
+                  </option>
+                </select>
+                <div class="form-text">
+                  Escolha de 1 a 4 sessões. A quantidade não pode se repetir entre planos ativos.
+                  Planos cadastrados depois devem oferecer mais sessões.
+                  Aplica-se separadamente ao proprietário e a cada funcionário vinculado. Clientes não têm teto de aparelhos.
+                </div>
               </div>
 
             </div>
@@ -468,6 +498,7 @@
           </transition>
 
           <!-- ── Erros de validação ── -->
+          <div v-if="errorMessage" class="alert alert-danger rounded-3 mt-2 mb-0" role="alert">{{ errorMessage }}</div>
           <div v-if="validationErrors.length > 0" class="alert alert-warning rounded-3 mt-2 mb-0">
             <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle me-1"></i> Corrija os erros antes de salvar:</div>
             <ul class="mb-0 ps-3">
@@ -494,7 +525,7 @@
 
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { api } from '@/services/api'
 import SuperAdminLayout from '@/views/super-admin/Layout/SuperAdminLayout.vue'
 
@@ -515,6 +546,7 @@ const getEmptyForm = () => ({
   max_employees: '',
   max_services: '',
   max_appointments_per_month: '',
+  max_owner_sessions: 1,
   active: true,
   highlight: false,
   promotional_price: '',
@@ -525,6 +557,19 @@ const getEmptyForm = () => ({
 })
 
 const form = ref(getEmptyForm())
+const activePlanCount = computed(() => plans.value.filter(plan => plan.active).length)
+const highestActiveSessionLimit = computed(() => Math.max(0,
+  ...plans.value.filter(plan => plan.active).map(plan => Number(plan.max_owner_sessions))
+))
+const catalogFull = computed(() => highestActiveSessionLimit.value >= 4)
+const otherActivePlans = computed(() => plans.value.filter(plan => plan.active && plan.id !== editingPlanId.value))
+const isSessionLimitUsed = (limit) => plans.value.some(plan =>
+  plan.active && plan.id !== editingPlanId.value && Number(plan.max_owner_sessions) === limit
+)
+const isEarlierPlan = (plan) => !editingPlanId.value || Number(plan.id) < Number(editingPlanId.value)
+const isSessionLimitOutOfOrder = (limit) => otherActivePlans.value.some(plan =>
+  isEarlierPlan(plan) ? limit <= Number(plan.max_owner_sessions) : limit >= Number(plan.max_owner_sessions)
+)
 
 const loadPlans = async () => {
   loading.value = true
@@ -534,7 +579,6 @@ const loadPlans = async () => {
     const response = await api.get('/super_admin/plans')
     plans.value = Array.isArray(response.data) ? response.data : []
   } catch (error) {
-    console.error('Erro ao carregar planos:', error)
     errorMessage.value = error?.response?.data?.error || 'Não foi possível carregar os planos.'
   } finally {
     loading.value = false
@@ -542,12 +586,18 @@ const loadPlans = async () => {
 }
 
 const openCreateModal = () => {
+  if (loading.value || saving.value || catalogFull.value) return
   editingPlanId.value = null
   form.value = getEmptyForm()
+  form.value.max_owner_sessions = Math.min(highestActiveSessionLimit.value + 1, 4)
+  errorMessage.value = ''
+  validationErrors.value = []
   showModal.value = true
 }
 
 const openEditModal = (plan) => {
+  errorMessage.value = ''
+  validationErrors.value = []
   editingPlanId.value = plan.id
   form.value = {
     name: plan.name || '',
@@ -558,6 +608,7 @@ const openEditModal = (plan) => {
     max_employees: plan.max_employees ?? '',
     max_services: plan.max_services ?? '',
     max_appointments_per_month: plan.max_appointments_per_month ?? '',
+    max_owner_sessions: plan.max_owner_sessions ?? 1,
     active: !!plan.active,
     highlight: !!plan.highlight,
     promotional_price: plan.promotional_price ?? '',
@@ -590,6 +641,10 @@ const validateForm = () => {
   const price = normalizeNumber(f.price)
   if (!price || price <= 0) {
     errors.push('Preço deve ser maior que zero.')
+  } else if (f.active && otherActivePlans.value.some(plan =>
+    isEarlierPlan(plan) ? price <= Number(plan.price) : price >= Number(plan.price)
+  )) {
+    errors.push('O preço normal deve crescer conforme a ordem de cadastro dos planos ativos.')
   }
   const months = normalizeInteger(f.duration_months)
   if (!months || months <= 0 || months > 24) {
@@ -622,10 +677,19 @@ const validateForm = () => {
     errors.push('Máx. agendamentos/mês não pode ser negativo.')
   }
 
+  if (!Number.isInteger(Number(f.max_owner_sessions)) || Number(f.max_owner_sessions) < 1 || Number(f.max_owner_sessions) > 4) {
+    errors.push('Aparelhos simultâneos do proprietário deve estar entre 1 e 4.')
+  } else if (f.active && isSessionLimitUsed(Number(f.max_owner_sessions))) {
+    errors.push('Esse limite já pertence a outro plano ativo. Escolha uma faixa disponível ou inative o outro plano.')
+  } else if (f.active && isSessionLimitOutOfOrder(Number(f.max_owner_sessions))) {
+    errors.push('As sessões devem crescer conforme a ordem de cadastro dos planos ativos.')
+  }
+
   return errors
 }
 
 const savePlan = async () => {
+  if (saving.value) return
   errorMessage.value = ''
   validationErrors.value = []
 
@@ -647,6 +711,7 @@ const savePlan = async () => {
       max_employees: normalizeNullableInteger(form.value.max_employees),
       max_services: normalizeNullableInteger(form.value.max_services),
       max_appointments_per_month: normalizeNullableInteger(form.value.max_appointments_per_month),
+      max_owner_sessions: Number(form.value.max_owner_sessions),
       active: form.value.active,
       highlight: form.value.highlight,
       promotional_price: normalizeNullableNumber(form.value.promotional_price),
@@ -667,10 +732,9 @@ const savePlan = async () => {
     closeModal()
     await loadPlans()
   } catch (error) {
-    console.error('Erro ao salvar plano:', error)
     // Exibe apenas a mensagem genérica do servidor — nunca detalhes de stack trace
     const serverMsg = error?.response?.data?.error
-    errorMessage.value = serverMsg && serverMsg.length < 300
+    errorMessage.value = typeof serverMsg === 'string' && serverMsg.length < 300
       ? serverMsg
       : 'Não foi possível salvar o plano. Verifique os dados e tente novamente.'
   } finally {

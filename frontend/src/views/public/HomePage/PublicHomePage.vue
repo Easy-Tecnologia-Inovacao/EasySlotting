@@ -348,7 +348,7 @@
 </template>
 
 <script setup lang="ts">
-import { api } from '@/services/api'
+import { api, logoutCustomer } from '@/services/api'
 import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { useThemeStore } from '@/stores/themeStore'
 import { useRouter, useRoute } from 'vue-router'
@@ -397,7 +397,7 @@ const goToMyAccount = () => {
 
 const logout = async () => {
   try {
-    await api.delete(`/customer_auth/${currentSlug.value}/sign_out`)
+    await logoutCustomer()
   } catch {
     // Ignora erro — limpa local mesmo assim
   }

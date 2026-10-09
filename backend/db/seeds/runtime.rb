@@ -16,6 +16,9 @@ ActiveRecord::Base.transaction do
 
     admin = User.find_or_initialize_by(email: admin_email)
     if admin.new_record?
+      if User.exists?(role: 'super_admin')
+        raise 'A super admin already exists; use that account instead of creating another bootstrap administrator'
+      end
       admin.assign_attributes(
         name: 'Administrador', role: 'super_admin', provider: 'email', uid: admin_email,
         active: true, password: admin_password, password_confirmation: admin_password

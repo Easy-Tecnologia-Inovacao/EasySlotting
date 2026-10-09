@@ -4,20 +4,42 @@ class ApplicationController < ActionController::API
   include CustomerAuthenticatable
 
   before_action :validate_password_expiration!
+  prepend_before_action :reject_session_credentials_in_url
+  after_action :prevent_sensitive_response_caching
 
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
 
+  rescue_from OwnerSessionPolicy::SessionUnavailable do
+    @resource = nil
+    @token&.clear!
+    render json: { error: 'Sua sessão foi encerrada. Entre novamente.' }, status: :unauthorized
+  end
+
   private
+
+  def reject_session_credentials_in_url
+    # Tokens na URL podem vazar por histórico, Referer e logs de proxy.
+    if %w[access-token access_token refresh_token client uid].any? { |key| request.query_parameters.key?(key) }
+      render json: { error: 'Envie as credenciais de sessão apenas nos cabeçalhos.' }, status: :bad_request
+    end
+  end
+
+  def prevent_sensitive_response_caching
+    if request.headers['Authorization'].present? || request.headers['access-token'].present? ||
+       params[:controller].to_s.match?(/\A(?:devise_users|customer_auth|account|customer)\//)
+      response.headers['Cache-Control'] = 'no-store'
+      response.headers['Pragma'] = 'no-cache'
+    end
+  end
 
   # ─── Validação de expiração de senha (NIST SP 800-63B + LGPD Art. 46) ───
   # Política: Senhas expiram após 90 dias. Leitura (GET) é permitida para
   # carregar dados. Escrita (POST/PUT/PATCH/DELETE) é bloqueada até a troca.
   # Exceções: endpoints de autenticação e troca de senha.
   def validate_password_expiration!
+    return if auth_or_password_controller?
     # ── Staff (User / Devise Token Auth) ──
     if current_user
-      return if auth_or_password_controller?
-
       unless password_valid_for?(current_user)
         if request.get?
           # Leitura permitida — adiciona header informativo para o frontend
@@ -83,10 +105,12 @@ class ApplicationController < ActionController::API
         est_id.present? ? Establishment.find_by(id: est_id) : Establishment.first
       else
         # Usuário comum só acessa estabelecimentos aos quais pertence ou é dono
+        owned = current_user.owned_establishments.where(active: true)
+        shared = current_user.establishments.where(active: true, establishment_memberships: { active: true })
         if est_id.present?
-          current_user.owned_establishments.find_by(id: est_id) || current_user.establishments.find_by(id: est_id)
+          owned.find_by(id: est_id) || shared.find_by(id: est_id)
         else
-          current_user.owned_establishments.first || current_user.establishments.first
+          owned.first || shared.first
         end
       end
     end
@@ -129,7 +153,7 @@ class ApplicationController < ActionController::API
   def current_membership
     est = @establishment || current_establishment
     return nil unless est
-    @current_membership ||= current_user.establishment_memberships.find_by(establishment_id: est.id)
+    @current_membership ||= current_user.establishment_memberships.find_by(establishment_id: est.id, active: true)
   end
 
   def require_financial_access!
@@ -218,6 +242,9 @@ class ApplicationController < ActionController::API
     devise_users/sessions
     devise_users/passwords
     devise_users/confirmations
+    customer_auth/sessions
+    customer_auth/registrations
+    customer_auth/passwords
     account/users
   ].freeze
 

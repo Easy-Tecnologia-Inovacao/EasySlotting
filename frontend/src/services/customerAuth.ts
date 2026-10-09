@@ -9,6 +9,8 @@ const CUSTOMER_DATA_KEY          = 'customer-data'
 const CUSTOMER_SLUG_KEY          = 'customer-slug'
 const CUSTOMER_TOKEN_EXPIRES_KEY = 'customer-token-expires'
 const CUSTOMER_CSRF_TOKEN_KEY    = 'customer-csrf-token'
+let sessionVersion = 0
+export const getCustomerSessionVersion = (): number => sessionVersion
 
 export interface CustomerData {
   id:               number
@@ -35,6 +37,7 @@ export function saveCustomerSession(
   expiresIn    = 900, // 15 minutos por padrão
   csrfToken?:  string
 ): void {
+  clearCustomerSession()
   // O access token nunca deve sobreviver ao fechamento do navegador.
   // O refresh token permanece protegido no cookie HttpOnly do backend.
   const storage = sessionStorage
@@ -62,6 +65,7 @@ export function saveCustomerSession(
 
 /** Remove a sessão do customer de todas as storages */
 export function clearCustomerSession(): void {
+  sessionVersion++
   ;[localStorage, sessionStorage].forEach((s) => {
     s.removeItem(CUSTOMER_ACCESS_TOKEN_KEY)
     s.removeItem(CUSTOMER_DATA_KEY)
@@ -83,10 +87,7 @@ export function getCustomerCsrfToken(): string | null {
 
 /** Retorna os dados do customer ou null */
 export function getCustomerData(): CustomerData | null {
-  const raw =
-    localStorage.getItem(CUSTOMER_DATA_KEY) ||
-    sessionStorage.getItem(CUSTOMER_DATA_KEY) ||
-    null
+  const raw = sessionStorage.getItem(CUSTOMER_DATA_KEY)
 
   if (!raw) return null
 
@@ -99,11 +100,7 @@ export function getCustomerData(): CustomerData | null {
 
 /** Retorna o slug do estabelecimento da sessão do customer */
 export function getCustomerSlug(): string | null {
-  return (
-    localStorage.getItem(CUSTOMER_SLUG_KEY) ||
-    sessionStorage.getItem(CUSTOMER_SLUG_KEY) ||
-    null
-  )
+  return sessionStorage.getItem(CUSTOMER_SLUG_KEY)
 }
 
 /** Verifica se há uma sessão de customer ativa */
@@ -134,6 +131,15 @@ export function updateAccessToken(accessToken: string, csrfToken: string, expire
   storage.setItem(CUSTOMER_ACCESS_TOKEN_KEY, accessToken)
   storage.setItem(CUSTOMER_TOKEN_EXPIRES_KEY, String(expiresAt))
   storage.setItem(CUSTOMER_CSRF_TOKEN_KEY, csrfToken)
+}
+
+/** Atualiza o perfil sem estender a expiração local nem perder a proteção CSRF. */
+export function updateCustomerData(data: CustomerData): void {
+  if (!getCustomerToken()) return
+  sessionStorage.setItem(CUSTOMER_DATA_KEY, JSON.stringify({
+    id: data.id, name: data.name, image: data.image, establishment_id: data.establishment_id,
+    password_expired: data.password_expired ?? false
+  }))
 }
 
 // ─── Header para Axios ───────────────────────────────────────────────────────

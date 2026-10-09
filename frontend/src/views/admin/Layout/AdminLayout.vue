@@ -205,6 +205,12 @@
                 </router-link>
               </li>
 
+              <li class="nav-item" v-if="user?.role === 'owner' || user?.role === 'employee'">
+                <router-link class="nav-link-sidebar" active-class="active" to="/admin/dispositivos" @click="closeSidebarOnMobile">
+                  <i class="bi bi-laptop me-3"></i><span>Dispositivos conectados</span>
+                </router-link>
+              </li>
+
               <li class="nav-item mt-2 pt-3 border-top" v-if="user?.role === 'owner'">
                 <span class="small text-muted fw-bold text-uppercase px-3 d-block tracking-wide mb-1" style="font-size: 0.7rem;">
                   Customização
@@ -270,6 +276,12 @@
                 : 'Por segurança, no seu primeiro acesso você precisa criar uma nova senha para continuar usando o sistema.' 
               }}
             </p>
+
+            <div class="mb-3">
+              <label class="form-label fw-bold small text-muted">Senha atual</label>
+              <input type="password" class="form-control rounded-3" v-model="passwordForm.current_password"
+                autocomplete="current-password" placeholder="Digite sua senha atual" maxlength="128" />
+            </div>
 
             <div class="mb-3">
               <label class="form-label fw-bold small text-muted">Nova senha</label>
@@ -389,7 +401,7 @@
             <button
               class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm"
               @click="salvarNovaSenha"
-              :disabled="savingPassword || !isPasswordValid"
+              :disabled="savingPassword || !isPasswordValid || !passwordForm.current_password"
             >
               {{ savingPassword ? 'Salvando...' : 'Salvar nova senha' }}
             </button>
@@ -404,7 +416,7 @@
 import { watch, onMounted, ref, computed, nextTick } from 'vue'
 import { useThemeStore } from '@/stores/themeStore'
 import { useRouter, useRoute } from 'vue-router'
-import { api } from '@/services/api'
+import { api, logoutStaff } from '@/services/api'
 import { clearStaffAccessToken, getStaffAccessToken } from '@/services/staffAuth'
 import { Offcanvas, Modal } from 'bootstrap'
 
@@ -537,49 +549,12 @@ const handleOpenSite = async () => {
 }
 
 const logout = async () => {
-  const accessToken = getStaffAccessToken() || ''
-
-  const client =
-    localStorage.getItem('client') ||
-    sessionStorage.getItem('client') ||
-    ''
-
-  const uid =
-    localStorage.getItem('uid') ||
-    sessionStorage.getItem('uid') ||
-    ''
-
   try {
-    await api.delete('/devise_users/sign_out', {
-      headers: {
-        'access-token': accessToken,
-        client,
-        uid
-      }
-    })
-  } catch (error) {
-    console.error('Erro logout:', error?.response?.data || error)
+    await logoutStaff()
+  } catch {
+    // A sessão local já foi encerrada mesmo quando a rede está indisponível.
   } finally {
-    // Restaura tokens do localStorage
-    localStorage.removeItem('establishment-data')
-    clearStaffAccessToken()
-    localStorage.removeItem('client')
-    localStorage.removeItem('uid')
-    localStorage.removeItem('user')
-    localStorage.removeItem('role')
-    localStorage.removeItem('site-slug')
-    localStorage.removeItem('establishment-permissions')
-    localStorage.removeItem('salon-config')
-
-    clearStaffAccessToken()
-    sessionStorage.removeItem('client')
-    sessionStorage.removeItem('uid')
-    sessionStorage.removeItem('user')
-    sessionStorage.removeItem('role')
-    sessionStorage.removeItem('establishment-permissions')
-
     store.clearSalonConfig()
-
     router.push('/')
   }
 }
@@ -593,6 +568,7 @@ const handleLogout = async () => {
 const savingPassword = ref(false)
 const passwordError = ref('')
 const passwordForm = ref({
+  current_password: '',
   password: '',
   password_confirmation: ''
 })
@@ -763,6 +739,7 @@ async function salvarNovaSenha() {
     savingPassword.value = true
 
     await api.patch('/me/change_password', {
+      current_password: passwordForm.value.current_password,
       password: passwordForm.value.password,
       password_confirmation: passwordForm.value.password_confirmation
     })
@@ -781,7 +758,9 @@ async function salvarNovaSenha() {
       limparBackdropsModal()
     }, 350)
 
-    alert('Senha alterada com sucesso! Agora você já pode usar o sistema normalmente.')
+    clearStaffAccessToken()
+    alert('Senha alterada com sucesso. Faça login novamente.')
+    router.push('/sistema/login')
   } catch (error) {
     passwordError.value =
       error.response?.data?.errors?.join(', ') ||

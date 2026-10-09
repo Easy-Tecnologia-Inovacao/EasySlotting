@@ -6,6 +6,7 @@
 
 class CustomerAuth::SessionsController < ApplicationController
   wrap_parameters false
+  include LoginInput
 
   def create
     establishment = find_establishment
@@ -31,7 +32,7 @@ class CustomerAuth::SessionsController < ApplicationController
                       customer.authenticate(params[:password].to_s)
                     else
                       # Executa BCrypt equivalente para equiparar o tempo de resposta
-                      Customer.new(password: 'dummy_timing_protection_pwd').authenticate(params[:password].to_s)
+                      BCrypt::Password.new(Customer::DUMMY_PASSWORD_DIGEST) == params[:password]
                       false
                     end
 
@@ -72,92 +73,35 @@ class CustomerAuth::SessionsController < ApplicationController
                     status: :unauthorized
     end
 
-    raw_otp = params[:otp_code].to_s.strip
-    is_otp_attempt = raw_otp.match?(/\A\d{6}\z/)
-
-    # Validação e sanitização estrita do device_token (prevenção contra payload DoS / injeção)
-    raw_device_token = request.headers['X-Device-Token'].presence || params[:device_token].presence
-    device_token = if raw_device_token.is_a?(String) && raw_device_token.strip.match?(/\A[a-zA-Z0-9_\-]{8,64}\z/)
-                     raw_device_token.strip
-                   else
-                     nil
-                   end
-
-    if is_otp_attempt
-      unless customer.verify_login_otp(raw_otp)
+    device_token = sanitized_device_token
+    raw_otp = params[:otp_code]
+    if raw_otp.present?
+      unless customer.verify_login_otp(raw_otp, ip: request.remote_ip, device_token: device_token)
         return render json: { error: 'Código de verificação inválido ou expirado.' }, status: :unauthorized
       end
-      customer.add_trusted_device!(ip: request.remote_ip, device_token: device_token)
-    else
-      is_new_device = AuditLogger.new_device?(user: customer, ip: request.remote_ip, user_agent: request.user_agent)
-      if is_new_device && !customer.trusted_device?(ip: request.remote_ip, device_token: device_token)
-        # Cooldown de 60 segundos antes de reenviar e gerar novo código
-        should_generate_new = customer.login_otp_code.blank? ||
-                              customer.login_otp_sent_at.blank? ||
-                              customer.login_otp_sent_at < 60.seconds.ago
-
-        if should_generate_new
-          code = customer.generate_login_otp!
-          SecurityAlertMailer.login_verification_code(
-            user: customer,
-            otp_code: code,
-            ip: request.remote_ip,
-            user_agent: request.user_agent,
-            location: AuditLogger.geolocate(request.remote_ip)
-          ).deliver_later
-
-          Rails.logger.info "[OTP] Código enviado para #{mask_email(customer.email)}: #{code}" if Rails.env.development?
-        end
-
-        return render json: {
-          requires_verification: true,
-          email_masked: mask_email(customer.email),
-          methods: [
-            { id: 'email', name: 'Código via E-mail', active: true },
-            { id: 'totp', name: 'Aplicativo Autenticador (2FA)', active: false, badge: 'Em breve' }
-          ]
-        }, status: :ok
-      else
-        customer.add_trusted_device!(ip: request.remote_ip, device_token: device_token)
+    elsif !customer.first_successful_login? && !customer.trusted_device?(ip: request.remote_ip, device_token: device_token)
+      code = customer.generate_login_otp!(ip: request.remote_ip, device_token: device_token)
+      if code
+        SecurityAlertMailer.login_verification_code(
+          user: customer, otp_code: code, ip: request.remote_ip,
+          user_agent: request.user_agent, location: AuditLogger.geolocate(request.remote_ip)
+        ).deliver_later
       end
+      return render json: { requires_verification: true, email_masked: mask_email(customer.email),
+                            methods: [{ id: 'email', name: 'Código via E-mail', active: true }] }
     end
 
-    # Gera access token (curta duração — 15 minutos)
-    access_token = CustomerJsonWebToken.encode_access_token(
-      { customer_id: customer.id, establishment_id: establishment.id }
-    )
-
-    # Gera refresh token (longa duração — 7 dias)
-    refresh_token = CustomerJsonWebToken.encode_refresh_token(
-      { customer_id: customer.id, establishment_id: establishment.id }
-    )
-
-    # Salva hash do refresh token no banco
-    customer.update!(
-      refresh_token: Digest::SHA256.hexdigest(refresh_token),
-      refresh_token_expires_at: CustomerJwt::REFRESH_TOKEN_EXPIRATION.seconds.from_now
-    )
-
-    # Gera CSRF token para proteção adicional
-    csrf_token = SecureRandom.hex(32)
-    cookies.encrypted[:csrf_token] = {
-      value: csrf_token,
-      httponly: true,
-      secure: Rails.env.production?,
-      same_site: :strict,
-      expires: CustomerJwt::REFRESH_TOKEN_EXPIRATION.seconds.from_now
-    }
-
-    # Seta refresh token como httpOnly cookie
-    cookies.encrypted[:refresh_token] = {
-      value: refresh_token,
-      httponly: true,
-      secure: Rails.env.production?,
-      same_site: :strict,
-      expires: CustomerJwt::REFRESH_TOKEN_EXPIRATION.seconds.from_now,
-      path: '/api/customer_auth'
-    }
-
+    tokens = customer.with_lock do
+      unless customer.active? && customer.authenticate(params[:password])
+        raise CustomerAuthenticatable::TokenInvalidError
+      end
+      customer.add_trusted_device!(ip: request.remote_ip, device_token: device_token)
+      customer.customer_sessions.where('expires_at <= ?', Time.current).delete_all
+      session = customer.customer_sessions.build(session_id: SecureRandom.uuid,
+        expires_at: CustomerJwt::REFRESH_TOKEN_EXPIRATION.seconds.from_now)
+      issue_tokens(customer, establishment, session: session)
+    end
+    write_auth_cookies(tokens)
     is_expired = customer.password_changed_at.nil? || customer.password_changed_at < 90.days.ago
     customer_data = customer.as_safe_json.merge(password_expired: is_expired)
 
@@ -182,146 +126,132 @@ class CustomerAuth::SessionsController < ApplicationController
     end
 
     render json: {
-      access_token: access_token,
+      access_token: tokens.fetch(:access_token),
       token_type:   'Bearer',
-      expires_in:   CustomerJwt::ACCESS_TOKEN_EXPIRATION,
-      csrf_token:   csrf_token,
+      expires_in:   tokens.fetch(:expires_in),
+      csrf_token:   tokens.fetch(:csrf_token),
       customer:     customer_data
     }, status: :ok
   end
 
-  # POST /customer_auth/:slug/refresh
+  # POST /api/customer_auth/:slug/refresh
   def refresh
     establishment = find_establishment
     return unless establishment
+    return render_csrf_error unless valid_csrf_token?
 
-    # Lê refresh token do httpOnly cookie
-    refresh_token = cookies.encrypted[:refresh_token]
-    return render json: { error: 'Refresh token não encontrado.' }, status: :unauthorized if refresh_token.blank?
-
-    # Valida CSRF token (comparação segura contra timing attacks)
-    csrf_token = request.headers['X-CSRF-Token']
-    stored_csrf = cookies.encrypted[:csrf_token]
-    if csrf_token.blank? || stored_csrf.blank? || !ActiveSupport::SecurityUtils.secure_compare(csrf_token, stored_csrf)
-      return render json: { error: 'CSRF token inválido.' }, status: :forbidden
-    end
-
-    # Decodifica o refresh token
-    begin
-      payload = CustomerJsonWebToken.decode_refresh_token(refresh_token)
-    rescue CustomerAuthenticatable::TokenExpiredError
-      clear_auth_cookies
-      return render json: { error: 'Refresh token expirado. Faça login novamente.' }, status: :unauthorized
-    rescue CustomerAuthenticatable::TokenInvalidError
-      clear_auth_cookies
-      return render json: { error: 'Refresh token inválido.' }, status: :unauthorized
-    end
-
-    # Verifica se pertence a este estabelecimento
-    if payload[:establishment_id] != establishment.id
-      clear_auth_cookies
-      return render json: { error: 'Refresh token inválido para este estabelecimento.' }, status: :unauthorized
-    end
-
-    # Busca o customer
-    customer = Customer.find_by(
-      id: payload[:customer_id],
-      establishment_id: establishment.id,
-      active: true
-    )
-
-    unless customer
-      clear_auth_cookies
-      return render json: { error: 'Cliente não encontrado ou inativo.' }, status: :unauthorized
-    end
-
-    # Verifica se o refresh token está no banco (comparação segura contra timing attacks)
-    token_hash = Digest::SHA256.hexdigest(refresh_token)
-    if customer.refresh_token.blank? || !ActiveSupport::SecurityUtils.secure_compare(customer.refresh_token, token_hash)
-      # Possível uso de token roubado — invalida todos os tokens
-      customer.update!(refresh_token: nil, refresh_token_expires_at: nil)
-      clear_auth_cookies
-      return render json: { error: 'Refresh token inválido. Faça login novamente.' }, status: :unauthorized
-    end
-
-    # Verifica se não expirou
-    if customer.refresh_token_expires_at.present? && customer.refresh_token_expires_at < Time.current
-      customer.update!(refresh_token: nil, refresh_token_expires_at: nil)
-      clear_auth_cookies
-      return render json: { error: 'Refresh token expirado. Faça login novamente.' }, status: :unauthorized
-    end
-
-    # Gera novos tokens (rotação)
-    new_access_token = CustomerJsonWebToken.encode_access_token(
-      { customer_id: customer.id, establishment_id: establishment.id }
-    )
-
-    new_refresh_token = CustomerJsonWebToken.encode_refresh_token(
-      { customer_id: customer.id, establishment_id: establishment.id }
-    )
-
-    # Atualiza o refresh token no banco
-    customer.update!(
-      refresh_token: Digest::SHA256.hexdigest(new_refresh_token),
-      refresh_token_expires_at: CustomerJwt::REFRESH_TOKEN_EXPIRATION.seconds.from_now
-    )
-
-    # Novo CSRF token
-    new_csrf_token = SecureRandom.hex(32)
-    cookies.encrypted[:csrf_token] = {
-      value: new_csrf_token,
-      httponly: true,
-      secure: Rails.env.production?,
-      same_site: :strict,
-      expires: CustomerJwt::REFRESH_TOKEN_EXPIRATION.seconds.from_now
-    }
-
-    # Seta novo refresh token como httpOnly cookie
-    cookies.encrypted[:refresh_token] = {
-      value: new_refresh_token,
-      httponly: true,
-      secure: Rails.env.production?,
-      same_site: :strict,
-      expires: CustomerJwt::REFRESH_TOKEN_EXPIRATION.seconds.from_now,
-      path: '/api/customer_auth'
-    }
-
-    is_expired = customer.password_changed_at.nil? || customer.password_changed_at < 90.days.ago
-    customer_data = customer.as_safe_json.merge(password_expired: is_expired)
-
-    render json: {
-      access_token: new_access_token,
-      token_type:   'Bearer',
-      expires_in:   CustomerJwt::ACCESS_TOKEN_EXPIRATION,
-      csrf_token:   new_csrf_token,
-      customer:     customer_data
-    }, status: :ok
-  end
-
-  # DELETE /customer_auth/:slug/sign_out
-  def destroy
-    # Invalida o refresh token no banco
-    refresh_token = cookies.encrypted[:refresh_token]
-    if refresh_token.present?
-      token_hash = Digest::SHA256.hexdigest(refresh_token)
-      customer = Customer.find_by(refresh_token: token_hash)
-      if customer
-        customer.update!(refresh_token: nil, refresh_token_expires_at: nil)
-        # Registra logout
-        AuditLogger.log_logout(
-          user: customer,
-          ip: request.remote_ip,
-          user_agent: request.user_agent
-        )
+    raw_token = cookies.encrypted[:refresh_token]
+    payload = CustomerJsonWebToken.decode_refresh_token(raw_token)
+    customer = establishment.customers.find_by(id: payload[:customer_id], active: true)
+    tokens = nil
+    if customer && payload[:establishment_id] == establishment.id
+      customer.with_lock do
+        session = customer.customer_sessions.active.find_by(session_id: payload[:sid])
+        if customer.valid_auth_session?(payload[:sid]) && session&.refresh_matches?(raw_token) &&
+           session.csrf_matches?(request.headers['X-CSRF-Token'])
+          tokens = issue_tokens(customer, establishment, session: session)
+        end
       end
     end
+    # Uma requisição obsoleta nunca revoga uma sessão mais recente.
+    return render_session_error unless tokens
 
+    write_auth_cookies(tokens)
+    expired = customer.password_changed_at.nil? || customer.password_changed_at < 90.days.ago
+    render json: tokens.except(:refresh_token).merge(token_type: 'Bearer',
+      expires_in: tokens.fetch(:expires_in),
+      customer: customer.as_safe_json.merge(password_expired: expired))
+  rescue CustomerAuthenticatable::TokenExpiredError, CustomerAuthenticatable::TokenInvalidError
+    render_session_error
+  end
+
+  # DELETE /api/customer_auth/:slug/sign_out
+  def destroy
+    establishment = find_establishment
+    return unless establishment
+
+    customer = begin
+      resolve_customer_from_token
+    rescue CustomerAuthenticatable::TokenExpiredError, CustomerAuthenticatable::TokenInvalidError
+      nil
+    end
+    if customer
+      return render_session_error unless customer.establishment_id == establishment.id
+      session_id = current_customer_session.session_id
+    elsif cookies.encrypted[:refresh_token].present?
+      return render_csrf_error unless valid_csrf_token?
+      payload = CustomerJsonWebToken.decode_refresh_token(cookies.encrypted[:refresh_token])
+      return render_session_error unless payload[:establishment_id] == establishment.id
+      if request.headers['Authorization'].present?
+        # Uma aba antiga pode enviar Bearer A e cookie B compartilhado. Mesmo
+        # com A expirado, não permitir que esse logout revogue outra sessão.
+        match = request.headers['Authorization'].match(/\ABearer ([^\s]+)\z/i)
+        return render_session_error unless match
+        begin
+          expected = CustomerJsonWebToken.decode_access_token(match[1], allow_expired: true)
+        rescue CustomerAuthenticatable::TokenExpiredError, CustomerAuthenticatable::TokenInvalidError
+          return render_session_error
+        end
+        return render_session_error unless %i[customer_id establishment_id sid].all? { |key| expected[key] == payload[key] }
+      end
+      customer = establishment.customers.find_by(id: payload[:customer_id])
+      session_id = payload[:sid]
+      cookie_auth = true
+    end
+
+    if customer
+      customer.with_lock do
+        session = customer.customer_sessions.active.find_by(session_id: session_id)
+        if session && (!cookie_auth || (session.refresh_matches?(cookies.encrypted[:refresh_token]) &&
+                                       session.csrf_matches?(request.headers['X-CSRF-Token'])))
+          session.destroy!
+        end
+      end
+      AuditLogger.log_logout(user: customer, ip: request.remote_ip, user_agent: request.user_agent)
+    end
     clear_auth_cookies
-
-    render json: { message: 'Logout realizado com sucesso.' }, status: :ok
+    render json: { message: 'Logout realizado com sucesso.' }
+  rescue CustomerAuthenticatable::TokenExpiredError, CustomerAuthenticatable::TokenInvalidError
+    # Token expirado: logout por cookie exige ainda a proteção CSRF.
+    return render_csrf_error unless valid_csrf_token?
+    clear_auth_cookies
+    render json: { message: 'Logout realizado com sucesso.' }
   end
 
   private
+
+  def issue_tokens(customer, establishment, session:)
+    claims = { customer_id: customer.id, establishment_id: establishment.id, sid: session.session_id }
+    refresh_token = CustomerJsonWebToken.encode_refresh_token(claims, exp: session.expires_at)
+    csrf_token = SecureRandom.hex(32)
+    session.update!(refresh_token_digest: Digest::SHA256.hexdigest(refresh_token),
+                    csrf_token_digest: Digest::SHA256.hexdigest(csrf_token))
+    access_expiry = [CustomerJwt::ACCESS_TOKEN_EXPIRATION.seconds.from_now, session.expires_at].min
+    { access_token: CustomerJsonWebToken.encode_access_token(claims, exp: access_expiry),
+      refresh_token: refresh_token, csrf_token: csrf_token,
+      expires_in: [access_expiry.to_i - Time.current.to_i, 0].max, refresh_expires_at: session.expires_at }
+  end
+
+  def write_auth_cookies(tokens)
+    attributes = { httponly: true, secure: request.ssl? || Rails.env.production?, same_site: :strict,
+                   expires: tokens.fetch(:refresh_expires_at), path: '/api/customer_auth' }
+    cookies.encrypted[:refresh_token] = attributes.merge(value: tokens.fetch(:refresh_token))
+    cookies.encrypted[:csrf_token] = attributes.merge(value: tokens.fetch(:csrf_token))
+  end
+
+  def valid_csrf_token?
+    supplied = request.headers['X-CSRF-Token']
+    stored = cookies.encrypted[:csrf_token]
+    supplied.present? && stored.present? && ActiveSupport::SecurityUtils.secure_compare(supplied, stored)
+  end
+
+  def render_csrf_error
+    render json: { error: 'Não foi possível validar a requisição.' }, status: :forbidden
+  end
+
+  def render_session_error
+    render json: { error: 'Sessão inválida ou expirada. Faça login novamente.' }, status: :unauthorized
+  end
 
   def find_establishment
     est = Establishment.find_by(slug: params[:slug], active: true)
@@ -331,19 +261,12 @@ class CustomerAuth::SessionsController < ApplicationController
 
   def clear_auth_cookies
     cookies.delete(:refresh_token, path: '/api/customer_auth')
-    cookies.delete(:csrf_token)
+    cookies.delete(:csrf_token, path: '/api/customer_auth')
+    cookies.delete(:csrf_token, path: '/')
   end
 
   def mask_email(email)
-    return '' if email.blank?
-    parts = email.split('@')
-    name = parts.first
-    domain = parts.last
-    masked_name = if name.length <= 2
-                    name[0] + '*'
-                  else
-                    name[0] + ('*' * (name.length - 2)) + name[-1]
-                  end
-    "#{masked_name}@#{domain}"
+    name, domain = email.split('@', 2)
+    "#{name[0]}***@#{domain}"
   end
 end

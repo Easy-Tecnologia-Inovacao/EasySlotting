@@ -227,7 +227,6 @@
 import { ref, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/services/api'
-import { setStaffAccessToken } from '@/services/staffAuth'
 
 const router = useRouter()
 const isDarkMode = ref(localStorage.getItem('easyslotting_theme') === 'dark')
@@ -375,17 +374,6 @@ const handleSubmit = async () => {
   try {
     loading.value = true
     const response = await api.post('/owner_onboarding', payload)
-
-    const accessToken = response.headers['access-token'] || ''
-    const client = response.headers['client'] || ''
-    const uid = response.headers['uid'] || ''
-    const user = response.data?.user || response.data?.data?.user || {}
-
-    setStaffAccessToken(accessToken)
-    sessionStorage.setItem('client', client)
-    sessionStorage.setItem('uid', uid)
-    localStorage.setItem('user', JSON.stringify(user))
-    localStorage.setItem('role', user?.role || '')
 
     alert(response.data?.message || 'Conta empresarial criada com sucesso!')
     router.push('/sistema/login')

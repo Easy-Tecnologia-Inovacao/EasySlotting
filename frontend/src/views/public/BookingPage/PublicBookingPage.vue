@@ -644,7 +644,7 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useThemeStore } from '@/stores/themeStore'
 import { useRouter, useRoute } from 'vue-router'
-import { api } from '@/services/api'
+import { api, logoutCustomer } from '@/services/api'
 import { isCustomerLoggedIn, getCustomerData, clearCustomerSession } from '@/services/customerAuth'
 
 const store = useThemeStore()
@@ -874,7 +874,7 @@ const filteredPackages = computed<ServicePackageItem[]>(() => {
 const logout = async () => {
   try {
     // Invalida o refresh token no backend
-    await api.delete(`/customer_auth/${currentSlug.value}/sign_out`)
+    await logoutCustomer()
   } catch {
     // Ignora erro — limpa local mesmo assim
   }

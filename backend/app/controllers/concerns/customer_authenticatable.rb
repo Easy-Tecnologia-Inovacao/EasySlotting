@@ -30,6 +30,10 @@ module CustomerAuthenticatable
     @current_customer
   end
 
+  def current_customer_session
+    @current_customer_session
+  end
+
   private
 
   def resolve_customer_from_token
@@ -39,8 +43,9 @@ module CustomerAuthenticatable
     header = request.headers['Authorization']
     return nil if header.blank?
 
-    token = header.split(' ').last
-    return nil if token.blank?
+    match = header.match(/\ABearer ([^\s]+)\z/i)
+    return nil unless match
+    token = match[1]
 
     payload = CustomerJsonWebToken.decode_access_token(token)
 
@@ -49,7 +54,11 @@ module CustomerAuthenticatable
 
     return nil if customer_id.blank? || establishment_id.blank?
 
-    Customer.find_by(id: customer_id, establishment_id: establishment_id, active: true)
+    customer = Customer.find_by(id: customer_id, establishment_id: establishment_id, active: true)
+    if customer&.valid_auth_session?(payload[:sid])
+      @current_customer_session = customer.customer_sessions.active.find_by(session_id: payload[:sid])
+      customer if @current_customer_session
+    end
   end
 
   def render_unauthorized
