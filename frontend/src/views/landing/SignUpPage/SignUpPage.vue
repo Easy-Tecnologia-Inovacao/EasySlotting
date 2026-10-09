@@ -230,7 +230,7 @@ import { api } from '@/services/api'
 import { setStaffAccessToken } from '@/services/staffAuth'
 
 const router = useRouter()
-const isDarkMode = ref(localStorage.getItem('easysloting_theme') === 'dark')
+const isDarkMode = ref(localStorage.getItem('easyslotting_theme') === 'dark')
 const loading = ref(false)
 const currentStep = ref(1)
 
@@ -253,7 +253,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
   },
   { immediate: true }
 )
@@ -282,7 +282,7 @@ const nextStep = () => {
   if (!/[0-9]/.test(p)) errors.push('pelo menos um número')
   if (!/[^A-Za-z0-9]/.test(p)) errors.push('pelo menos um caractere especial')
 
-  const obviousWords = ['admin', 'senha', 'password', '123456', 'easysloting', 'agendamento', 'barbearia']
+  const obviousWords = ['admin', 'senha', 'password', '123456', 'easyslotting', 'agendamento', 'barbearia']
   for (const word of obviousWords) {
     if (p.toLowerCase().includes(word)) {
       errors.push(`não pode conter termos óbvios como '${word}'`)

@@ -66,7 +66,7 @@ const loading = ref(true)
 const error = ref('')
 const content = ref('')
 const establishmentName = ref('')
-const isDarkMode = ref(localStorage.getItem('easysloting_theme') === 'dark')
+const isDarkMode = ref(localStorage.getItem('easyslotting_theme') === 'dark')
 
 const pageTitles: Record<string, string> = {
   privacy_policy: 'Política de Privacidade',

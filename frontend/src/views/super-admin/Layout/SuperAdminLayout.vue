@@ -192,7 +192,7 @@ const closeSidebarOnMobile = () => {
 // ─── Theme ────────────────────────────────────────────────────────────────────
 onMounted(() => {
   resetOffcanvasState()
-  const savedTheme = localStorage.getItem('easysloting_theme')
+  const savedTheme = localStorage.getItem('easyslotting_theme')
   store.isDarkMode = savedTheme === 'dark'
   document.documentElement.setAttribute('data-bs-theme', store.isDarkMode ? 'dark' : 'light')
 })
@@ -202,7 +202,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
   },
   { immediate: true }
 )

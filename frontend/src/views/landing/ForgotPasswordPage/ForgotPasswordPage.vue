@@ -102,7 +102,7 @@
 import { ref, reactive, watch } from 'vue'
 import { api } from '@/services/api'
 
-const isDarkMode = ref(localStorage.getItem('easysloting_theme') === 'dark')
+const isDarkMode = ref(localStorage.getItem('easyslotting_theme') === 'dark')
 const loading = ref(false)
 const errorMsg = ref('')
 const emailSent = ref(false)
@@ -116,7 +116,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
   },
   { immediate: true }
 )

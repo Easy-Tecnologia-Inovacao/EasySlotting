@@ -1020,7 +1020,7 @@ const perfilVazio = () => ({
 <p><strong>Permitem que a plataforma lembre suas preferências de personalização.</strong></p>
 <table>
   <tr><th>Cookie</th><th>Finalidade</th><th>Duração</th></tr>
-  <tr><td>easysloting_theme</td><td>Armazena sua preferência de tema visual (claro/escuro)</td><td>Indefinida</td></tr>
+  <tr><td>easyslotting_theme</td><td>Armazena sua preferência de tema visual (claro/escuro)</td><td>Indefinida</td></tr>
   <tr><td>site-slug</td><td>Identifica o estabelecimento acessado</td><td>Sessão</td></tr>
 </table>
 

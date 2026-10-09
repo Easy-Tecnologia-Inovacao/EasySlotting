@@ -255,7 +255,7 @@ const router = useRouter()
 const route  = useRoute()
 const store  = useThemeStore()
 
-const isDarkMode = ref(localStorage.getItem('easysloting_theme') === 'dark')
+const isDarkMode = ref(localStorage.getItem('easyslotting_theme') === 'dark')
 const loading    = ref(false)
 const errorMsg   = ref('')
 const successMsg = ref('')
@@ -305,7 +305,7 @@ function validatePasswordStrength(password: string): string[] {
   if (!/[a-z]/.test(password)) errors.push('Pelo menos 1 letra minúscula')
   if (!/[0-9]/.test(password)) errors.push('Pelo menos 1 número')
   if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) errors.push('Pelo menos 1 caractere especial')
-  const obviousWords = ['admin', 'senha', 'password', '123456', 'easysloting', 'agendamento', 'barbearia']
+  const obviousWords = ['admin', 'senha', 'password', '123456', 'easyslotting', 'agendamento', 'barbearia']
   const lowerPass = password.toLowerCase()
   for (const word of obviousWords) {
     if (lowerPass.includes(word)) errors.push(`Não pode conter "${word}"`)
@@ -353,7 +353,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
     store.isDarkMode = newVal
   },
   { immediate: true }

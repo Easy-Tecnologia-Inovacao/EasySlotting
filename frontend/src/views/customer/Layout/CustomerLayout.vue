@@ -558,7 +558,7 @@ const passwordRules = computed(() => {
   const hasSymbol = /[^A-Za-z0-9]/.test(p)
 
   // Palavras óbvias
-  const obviousWords = ['admin', 'senha', 'password', '123456', 'easysloting', 'agendamento', 'barbearia']
+  const obviousWords = ['admin', 'senha', 'password', '123456', 'easyslotting', 'agendamento', 'barbearia']
   let noObviousWords = true
   const lowerP = p.toLowerCase()
   for (const word of obviousWords) {
@@ -722,7 +722,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
   },
   { immediate: true }
 )
@@ -746,7 +746,7 @@ onMounted(async () => {
     }
   })
 
-  const savedTheme = localStorage.getItem('easysloting_theme')
+  const savedTheme = localStorage.getItem('easyslotting_theme')
   store.isDarkMode = savedTheme === 'dark'
 
   document.documentElement.setAttribute(

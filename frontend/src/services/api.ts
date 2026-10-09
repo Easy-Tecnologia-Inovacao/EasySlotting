@@ -8,6 +8,7 @@ import {
   isTokenExpiringSoon
 } from '@/services/customerAuth'
 import { clearStaffAccessToken, getStaffAccessToken, setStaffAccessToken } from '@/services/staffAuth'
+import { DEVICE_TOKEN_STORAGE_KEY } from '@/services/storageKeys'
 
 // Utiliza variável de ambiente para a URL da API.
 // Em desenvolvimento, se não houver VITE_API_URL, detecta o host atual para facilitar acesso via IP/Mobile.
@@ -48,12 +49,12 @@ const processQueue = (error: any, token: string | null = null) => {
 
 // ─── Device Token (OWASP Trusted Device / Resiliência a IP Rotativo) ─────────
 export const getOrCreateDeviceToken = (): string => {
-  let token = localStorage.getItem('easysloting_device_token')
+  let token = localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY)
   if (!token) {
     token = typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
       : 'dt_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
-    localStorage.setItem('easysloting_device_token', token)
+    localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token)
   }
   return token
 }

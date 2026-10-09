@@ -505,7 +505,7 @@ const passwordForm = ref({
 
 const isPasswordFormValid = computed(() => {
   const p = passwordForm.value.password
-  const obviousWords = ['admin', 'senha', 'password', '123456', 'easysloting', 'agendamento', 'barbearia']
+  const obviousWords = ['admin', 'senha', 'password', '123456', 'easyslotting', 'agendamento', 'barbearia']
   const hasObviousWord = obviousWords.some(w => p.toLowerCase().includes(w))
 
   return (
