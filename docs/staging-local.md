@@ -281,20 +281,19 @@ sudo docker compose --env-file backend/.env.staging -f compose.staging.yaml down
 ## Deploy automático pela branch `staging`
 
 O workflow `.github/workflows/deploy-staging.yml` executa o deploy a cada push
-em `staging`. O script `scripts/deploy-staging.sh` exige uma árvore Git limpa,
-atualiza com `git pull --ff-only`, valida o Compose, recria os serviços e
-aguarda o healthcheck do serviço `web`.
+em `staging`. Como a VM usa um IP privado, o workflow usa um runner
+auto-hospedado instalado na própria VM com as labels `self-hosted`, `linux` e
+`staging`. O script exige uma árvore Git limpa, atualiza com `git pull
+--ff-only`, valida o Compose, recria os serviços e aguarda o healthcheck do
+serviço `web`.
 
-Cadastre estes secrets no GitHub em **Settings > Secrets and variables > Actions**:
+No GitHub, abra **Settings > Actions > Runners > New self-hosted runner** e
+execute na VM os comandos Linux mostrados pelo GitHub. Durante o cadastro,
+selecione as labels `linux` e `staging`, instale o runner como serviço e deixe-o
+iniciar com o sistema. O usuário do runner precisa acessar o Docker; prefira
+adicioná-lo ao grupo `docker`. Se usar `sudo`, o script detecta essa alternativa
+com `sudo -n`, que exige uma regra sem senha.
 
-- `STAGING_HOST`: IP ou hostname SSH da VM;
-- `STAGING_SSH_PORT`: normalmente `22`;
-- `STAGING_SSH_USER`: normalmente `deploy`;
-- `STAGING_SSH_PRIVATE_KEY`: chave privada usada somente pelo workflow.
-
-Como o runner não possui terminal interativo, o usuário de deploy precisa poder
-executar Docker sem senha. Prefira adicioná-lo ao grupo `docker` ou configure
-uma regra restrita de `sudo` para `/usr/bin/docker`, pois o script usa `sudo -n`.
 Teste na VM com:
 
 ```bash

@@ -11,30 +11,9 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    # O runner fica dentro da VM, pois a staging usa um IP privado da rede local.
+    runs-on: [self-hosted, linux, staging]
     timeout-minutes: 30
     steps:
-      - name: Configurar SSH
-        env:
-          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
-          STAGING_HOST: ${{ secrets.STAGING_HOST }}
-          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
-        run: |
-          set -eu
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$STAGING_SSH_PRIVATE_KEY" > ~/.ssh/staging_deploy
-          chmod 600 ~/.ssh/staging_deploy
-          ssh-keyscan -p "${STAGING_SSH_PORT:-22}" -H "$STAGING_HOST" >> ~/.ssh/known_hosts
-
       - name: Atualizar staging
-        env:
-          STAGING_HOST: ${{ secrets.STAGING_HOST }}
-          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
-          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
-        run: |
-          ssh -i ~/.ssh/staging_deploy \
-            -p "${STAGING_SSH_PORT:-22}" \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            "${STAGING_SSH_USER:-deploy}@${STAGING_HOST}" \
-            'bash ~/EasySlotting/scripts/deploy-staging.sh'
+        run: bash "$HOME/EasySlotting/scripts/deploy-staging.sh"

@@ -17,7 +17,12 @@ fi
 git checkout staging
 git pull --ff-only origin staging
 
-compose=(sudo -n docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+docker=(docker)
+if ! "${docker[@]}" info >/dev/null 2>&1; then
+  docker=(sudo -n docker)
+fi
+
+compose=("${docker[@]}" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 "${compose[@]}" config --quiet
 "${compose[@]}" up -d --build --force-recreate
 
@@ -28,7 +33,7 @@ if [[ -z "$web_container" ]]; then
 fi
 
 for attempt in {1..30}; do
-  health=$(sudo -n docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$web_container")
+  health=$("${docker[@]}" inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$web_container")
   case "$health" in
     healthy) echo "Deploy de staging concluído com sucesso."; exit 0 ;;
     unhealthy|dead) echo "O container web ficou em estado: $health" >&2; "${compose[@]}" ps --all; exit 1 ;;
