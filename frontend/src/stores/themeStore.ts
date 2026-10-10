@@ -1,11 +1,11 @@
-﻿// src/stores/themeStore.ts
+// src/stores/themeStore.ts
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
 const SALON_CONFIG_KEY = 'salon-config'
 
 const defaultSalonConfig = {
-  nome: 'EasySloting',
+  nome: 'EasySlotting',
   descricao: '',
   booking_mode: 'time',
 
@@ -76,14 +76,14 @@ export const useThemeStore = defineStore('theme', () => {
     cardDark: '#2b3035',
   })
 
-  const isDarkMode = ref(localStorage.getItem('easysloting_theme') === 'dark')
+  const isDarkMode = ref(localStorage.getItem('easyslotting_theme') === 'dark')
 
   watch(
     isDarkMode,
     (newVal) => {
       const theme = newVal ? 'dark' : 'light'
       document.documentElement.setAttribute('data-bs-theme', theme)
-      localStorage.setItem('easysloting_theme', theme)
+      localStorage.setItem('easyslotting_theme', theme)
     },
     { immediate: true }
   )

@@ -1,6 +1,19 @@
 # config/initializers/rack_attack.rb
 
 class Rack::Attack
+  # Rack não interpreta JSON em req.params; o login Vue envia application/json.
+  def self.login_email(request)
+    body = request.body
+    raw = body.read(4097)
+    body.rewind
+    return if raw.bytesize > 4096
+    data = JSON.parse(raw)
+    email = data.is_a?(Hash) ? data['email'] : nil
+    Digest::SHA256.hexdigest(email.strip.downcase) if email.is_a?(String) && email.bytesize <= 254
+  rescue JSON::ParserError, IOError
+    nil
+  end
+
   # 1. Throttle por IP para qualquer requisição (Evita DoS genérico)
   # 100 requisições a cada 1 minuto por IP
   throttle('req/ip', limit: 100, period: 1.minute) do |req|
@@ -15,7 +28,15 @@ class Rack::Attack
     end
   end
 
+  throttle('logins/staff/email', limit: 5, period: 1.minute) do |req|
+    Rack::Attack.login_email(req) if req.path == '/api/devise_users/sign_in' && req.post?
+  end
+
   # 3. Proteção de Login de Cliente (JWT Custom) por IP
+  throttle('staff_recovery/ip', limit: 20, period: 1.minute) do |req|
+    req.ip if req.path == '/api/devise_users/restore_session' && req.post?
+  end
+
   throttle('logins/customer/ip', limit: 5, period: 1.minute) do |req|
     if req.path.include?('/customer_auth/') && req.path.include?('/sign_in') && req.post?
       req.ip
@@ -25,12 +46,8 @@ class Rack::Attack
   # 3b. Proteção de Login de Cliente por E-mail (evita brute-force distribuído com IPs rotativos)
   throttle('logins/customer/email', limit: 5, period: 1.minute) do |req|
     if req.path.include?('/customer_auth/') && req.path.include?('/sign_in') && req.post?
-      begin
-        body_params = req.params
-        body_params['email'].to_s.downcase.strip.presence
-      rescue
-        nil
-      end
+      email = Rack::Attack.login_email(req)
+      "#{req.path}:#{email}" if email
     end
   end
 
@@ -58,10 +75,15 @@ class Rack::Attack
     end
   end
 
+  # Exclusão requer reautenticação; limita tentativas de senha nesta ação.
+  throttle('customer_account_delete/ip', limit: 5, period: 15.minutes) do |req|
+    req.ip if req.path == '/api/customer/profile' && req.delete?
+  end
+
   # 6. Proteção de Endpoints Administrativos
   # Limita requisições administrativas a 45 por minuto por IP
   throttle('admin/ip', limit: 45, period: 1.minute) do |req|
-    if req.path.start_with?('/api/admin/') || req.path.include?('/admin/')
+    if req.path.start_with?('/api/admin/', '/api/super_admin/') || req.path.include?('/admin/')
       req.ip
     end
   end
@@ -73,12 +95,8 @@ class Rack::Attack
     end
   end
 
-  # 6c. Throttle por user para endpoints de account
-  throttle('account/user', limit: 30, period: 1.minute) do |req|
-    if req.path.start_with?('/api/me/') && req.env['HTTP_UID']
-      req.env['HTTP_UID']
-    end
-  end
+  # Account::UsersController aplica a quota por ID após authenticate_user!.
+  # Tráfego não autenticado continua sujeito ao throttle geral por IP.
 
   # 7. Proteção para modificações de Serviços e Pacotes (POST, PUT, DELETE)
   # Limita escritas a 15 por minuto por IP para evitar cadastros automatizados massivos
@@ -184,10 +202,18 @@ class Rack::Attack
   end
 
   # Resposta customizada ao ser bloqueado (inclui Retry-After para bots bem comportados)
-  self.throttled_responder = lambda do |env|
-    req = Rack::Request.new(env)
-    match_data = env['rack.attack.match_data']
-    retry_after = match_data ? (match_data[:period]).to_s : '60'
+  self.throttled_responder = lambda do |request|
+    match_data = request.env['rack.attack.match_data']
+    # O Rack Attack 6.8 pode fornecer um Request em match_data, não um Hash.
+    # Nunca deixe o responder de rate limit gerar um 500 secundário.
+    retry_after = if match_data.respond_to?(:[])
+                    (match_data[:period] || match_data['period']).to_s
+                  elsif match_data.respond_to?(:period)
+                    match_data.period.to_s
+                  else
+                    '60'
+                  end
+    retry_after = '60' if retry_after.blank? || retry_after == '0'
 
     [ 429,  # Too Many Requests
       { 'Content-Type' => 'application/json', 'Retry-After' => retry_after },

@@ -1,11 +1,11 @@
-﻿<template>
+<template>
   <div class="landing-page min-vh-100 bg-body text-body" :data-bs-theme="store.isDarkMode ? 'dark' : 'light'">
 
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg py-3 sticky-top navbar-glass">
       <div class="container">
         <router-link to="/" class="navbar-brand fw-800 fs-3 text-primary d-flex align-items-center gap-2">
-          <i class="bi bi-calendar-check-fill"></i> EASYSLOTING
+          <i class="bi bi-calendar-check-fill"></i> EASYSLOTTING
         </router-link>
 
         <div class="ms-auto d-flex align-items-center gap-2 gap-md-3 navbar-actions">
@@ -228,7 +228,7 @@
 
               <div class="plan-price-block">
                 <!-- Preço riscado se houver promoção -->
-                <div v-if="plan.promotion_active && plan.promotional_price" class="mb-1">
+                <div v-if="plan.promotion_active && plan.promotional_price !== null" class="mb-1">
                   <span class="text-secondary text-decoration-line-through small me-2">
                     R$ {{ formatPrice(plan.price) }}
                   </span>
@@ -245,6 +245,10 @@
               </div>
 
               <ul class="plan-features">
+                <li>
+                  <i class="bi bi-check2 text-success me-2"></i>
+                  Até <strong>{{ plan.max_owner_sessions ?? 1 }}</strong> aparelho{{ (plan.max_owner_sessions ?? 1) > 1 ? 's' : '' }} conectado{{ (plan.max_owner_sessions ?? 1) > 1 ? 's' : '' }} por conta do proprietário ou funcionário
+                </li>
                 <li v-if="plan.max_employees">
                   <i class="bi bi-people-fill text-primary"></i>
                   Até <strong>{{ plan.max_employees }}</strong> profissional{{ plan.max_employees > 1 ? 'is' : '' }}
@@ -312,7 +316,7 @@
 
     <!-- Footer mínimo -->
     <footer class="py-4 border-top text-center text-secondary small">
-      © {{ new Date().getFullYear() }} EasySloting. Todos os direitos reservados.
+      © {{ new Date().getFullYear() }} EasySlotting. Todos os direitos reservados.
     </footer>
 
   </div>
@@ -322,7 +326,8 @@
 import { computed, onMounted, onUnmounted, watch, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useThemeStore } from '@/stores/themeStore'
-import { api } from '@/services/api'
+import { api, logoutStaff } from '@/services/api'
+import { getStaffAccessToken } from '@/services/staffAuth'
 
 const router = useRouter()
 const store  = useThemeStore()
@@ -353,10 +358,7 @@ const formatPrice = (value) =>
 // ─── Autenticação ─────────────────────────────────────────────────────────────
 const refreshAuthState = () => { authVersion.value++ }
 
-const getToken = () =>
-  localStorage.getItem('access-token') ||
-  sessionStorage.getItem('access-token') ||
-  ''
+const getToken = () => getStaffAccessToken() || ''
 
 const getStoredUser = () => {
   authVersion.value
@@ -380,26 +382,10 @@ const myAccountRoute = computed(() => {
 
 const logout = async () => {
   try {
-    const role = currentUser.value?.role
-    if (role === 'customer') {
-      const slug = localStorage.getItem('customer-slug') || sessionStorage.getItem('customer-slug')
-      if (slug) {
-        await api.delete(`/customer_auth/${slug}/sign_out`)
-      }
-    } else {
-      await api.delete('/devise_users/sign_out')
-    }
+    await logoutStaff()
   } catch {
-    // Ignora se a sessão ou token já expiraram no servidor
+    // A sessão local já foi encerrada mesmo quando a rede está indisponível.
   } finally {
-    ['access-token', 'client', 'uid', 'user'].forEach((k) => {
-      localStorage.removeItem(k)
-      sessionStorage.removeItem(k)
-    })
-    ;['customer-access-token', 'customer-data', 'customer-slug', 'customer-token-expires', 'customer-csrf-token'].forEach((k) => {
-      localStorage.removeItem(k)
-      sessionStorage.removeItem(k)
-    })
     refreshAuthState()
     router.push('/')
   }
@@ -407,7 +393,7 @@ const logout = async () => {
 
 // ─── Tema ─────────────────────────────────────────────────────────────────────
 onMounted(() => {
-  const savedTheme = localStorage.getItem('easysloting_theme')
+  const savedTheme = localStorage.getItem('easyslotting_theme')
   store.isDarkMode = savedTheme === 'dark'
   refreshAuthState()
   window.addEventListener('storage', refreshAuthState)
@@ -425,7 +411,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
   },
   { immediate: true }
 )

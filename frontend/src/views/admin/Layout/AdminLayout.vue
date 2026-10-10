@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div :data-bs-theme="store.isDarkMode ? 'dark' : 'light'" class="app-wrapper min-vh-100 d-flex flex-column">
     <nav class="navbar navbar-expand-lg sticky-top shadow-sm py-3 navbar-custom">
       <div class="container-fluid px-lg-5 px-3 d-flex align-items-center">
@@ -13,7 +13,7 @@
         </button>
 
         <router-link class="navbar-brand fw-bold fs-3 text-primary m-0" to="/">
-          EASYSLOTING
+          EASYSLOTTING
         </router-link>
 
         <div class="ms-auto d-flex align-items-center gap-4">
@@ -205,6 +205,12 @@
                 </router-link>
               </li>
 
+              <li class="nav-item" v-if="user?.role === 'owner' || user?.role === 'employee'">
+                <router-link class="nav-link-sidebar" active-class="active" to="/admin/dispositivos" @click="closeSidebarOnMobile">
+                  <i class="bi bi-laptop me-3"></i><span>Dispositivos conectados</span>
+                </router-link>
+              </li>
+
               <li class="nav-item mt-2 pt-3 border-top" v-if="user?.role === 'owner'">
                 <span class="small text-muted fw-bold text-uppercase px-3 d-block tracking-wide mb-1" style="font-size: 0.7rem;">
                   Customização
@@ -232,6 +238,7 @@
                   type="button"
                   class="nav-link-sidebar text-danger hover-danger w-100 border-0 bg-transparent text-start"
                   @click="handleLogout"
+                  :disabled="loggingOut || savingPassword"
                 >
                   <i class="bi bi-box-arrow-left me-3"></i><span>Sair do painel</span>
                 </button>
@@ -270,6 +277,12 @@
                 : 'Por segurança, no seu primeiro acesso você precisa criar uma nova senha para continuar usando o sistema.' 
               }}
             </p>
+
+            <div class="mb-3">
+              <label class="form-label fw-bold small text-muted">Senha atual</label>
+              <input type="password" class="form-control rounded-3" v-model="passwordForm.current_password"
+                autocomplete="current-password" placeholder="Digite sua senha atual" maxlength="128" />
+            </div>
 
             <div class="mb-3">
               <label class="form-label fw-bold small text-muted">Nova senha</label>
@@ -387,9 +400,19 @@
 
           <div class="modal-footer border-top-0 pt-0">
             <button
+              type="button"
+              class="btn btn-outline-danger rounded-pill px-4 fw-semibold me-auto"
+              @click="handleLogout"
+              :disabled="loggingOut || savingPassword"
+            >
+              <i class="bi bi-box-arrow-left me-2" aria-hidden="true"></i>
+              {{ loggingOut ? 'Saindo...' : 'Sair da conta' }}
+            </button>
+            <button
+              type="button"
               class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm"
               @click="salvarNovaSenha"
-              :disabled="savingPassword || !isPasswordValid"
+              :disabled="loggingOut || savingPassword || !isPasswordValid || !passwordForm.current_password"
             >
               {{ savingPassword ? 'Salvando...' : 'Salvar nova senha' }}
             </button>
@@ -404,7 +427,8 @@
 import { watch, onMounted, ref, computed, nextTick } from 'vue'
 import { useThemeStore } from '@/stores/themeStore'
 import { useRouter, useRoute } from 'vue-router'
-import { api } from '@/services/api'
+import { api, logoutStaff } from '@/services/api'
+import { clearStaffAccessToken, getStaffAccessToken } from '@/services/staffAuth'
 import { Offcanvas, Modal } from 'bootstrap'
 
 const store = useThemeStore()
@@ -455,9 +479,7 @@ const resetOffcanvasState = () => {
 
 const carregarSlug = async () => {
   try {
-    const accessToken =
-      localStorage.getItem('access-token') ||
-      sessionStorage.getItem('access-token')
+    const accessToken = getStaffAccessToken()
 
     const client =
       localStorage.getItem('client') ||
@@ -538,65 +560,38 @@ const handleOpenSite = async () => {
 }
 
 const logout = async () => {
-  const accessToken =
-    localStorage.getItem('access-token') ||
-    sessionStorage.getItem('access-token') ||
-    ''
-
-  const client =
-    localStorage.getItem('client') ||
-    sessionStorage.getItem('client') ||
-    ''
-
-  const uid =
-    localStorage.getItem('uid') ||
-    sessionStorage.getItem('uid') ||
-    ''
-
   try {
-    await api.delete('/devise_users/sign_out', {
-      headers: {
-        'access-token': accessToken,
-        client,
-        uid
-      }
-    })
-  } catch (error) {
-    console.error('Erro logout:', error?.response?.data || error)
+    await logoutStaff()
+  } catch {
+    // A sessão local já foi encerrada mesmo quando a rede está indisponível.
   } finally {
-    // Restaura tokens do localStorage
-    localStorage.removeItem('establishment-data')
-    localStorage.removeItem('access-token')
-    localStorage.removeItem('client')
-    localStorage.removeItem('uid')
-    localStorage.removeItem('user')
-    localStorage.removeItem('role')
-    localStorage.removeItem('site-slug')
-    localStorage.removeItem('establishment-permissions')
-    localStorage.removeItem('salon-config')
-
-    sessionStorage.removeItem('access-token')
-    sessionStorage.removeItem('client')
-    sessionStorage.removeItem('uid')
-    sessionStorage.removeItem('user')
-    sessionStorage.removeItem('role')
-    sessionStorage.removeItem('establishment-permissions')
-
     store.clearSalonConfig()
-
     router.push('/')
   }
 }
 
+const loggingOut = ref(false)
+
 const handleLogout = async () => {
-  closeSidebarOnMobile()
-  await logout()
+  if (loggingOut.value || savingPassword.value) return
+  loggingOut.value = true
+  try {
+    closeSidebarOnMobile()
+    modalTrocaSenhaInstance?.hide()
+    passwordForm.value = { current_password: '', password: '', password_confirmation: '' }
+    passwordError.value = ''
+    await logout()
+  } finally {
+    limparBackdropsModal()
+    loggingOut.value = false
+  }
 }
 
 // 🔒 Senha Obrigatória Primeiro Acesso
 const savingPassword = ref(false)
 const passwordError = ref('')
 const passwordForm = ref({
+  current_password: '',
   password: '',
   password_confirmation: ''
 })
@@ -631,7 +626,7 @@ const passwordRules = computed(() => {
   const hasSymbol = /[^A-Za-z0-9]/.test(p)
 
   // Palavras óbvias
-  const obviousWords = ['admin', 'senha', 'password', '123456', 'easysloting', 'agendamento', 'barbearia']
+  const obviousWords = ['admin', 'senha', 'password', '123456', 'easyslotting', 'agendamento', 'barbearia']
   let noObviousWords = true
   const lowerP = p.toLowerCase()
   for (const word of obviousWords) {
@@ -742,7 +737,7 @@ const isExpiredState = computed(() => {
 })
 
 async function abrirModalTrocaSenhaSeNecessario() {
-  if (!shouldForcePasswordChange()) return
+  if (loggingOut.value || !getStaffAccessToken() || !shouldForcePasswordChange()) return
 
   await nextTick()
 
@@ -756,6 +751,7 @@ async function abrirModalTrocaSenhaSeNecessario() {
 }
 
 async function salvarNovaSenha() {
+  if (loggingOut.value || savingPassword.value) return
   passwordError.value = ''
 
   if (!isPasswordValid.value) {
@@ -767,6 +763,7 @@ async function salvarNovaSenha() {
     savingPassword.value = true
 
     await api.patch('/me/change_password', {
+      current_password: passwordForm.value.current_password,
       password: passwordForm.value.password,
       password_confirmation: passwordForm.value.password_confirmation
     })
@@ -785,7 +782,9 @@ async function salvarNovaSenha() {
       limparBackdropsModal()
     }, 350)
 
-    alert('Senha alterada com sucesso! Agora você já pode usar o sistema normalmente.')
+    clearStaffAccessToken()
+    alert('Senha alterada com sucesso. Faça login novamente.')
+    router.push('/sistema/login')
   } catch (error) {
     passwordError.value =
       error.response?.data?.errors?.join(', ') ||
@@ -802,7 +801,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
   },
   { immediate: true }
 )
@@ -877,7 +876,7 @@ const formatarDataRelativa = (dateStr) => {
 onMounted(async () => {
   resetOffcanvasState()
 
-  const savedTheme = localStorage.getItem('easysloting_theme')
+  const savedTheme = localStorage.getItem('easyslotting_theme')
   store.isDarkMode = savedTheme === 'dark'
 
   document.documentElement.setAttribute(

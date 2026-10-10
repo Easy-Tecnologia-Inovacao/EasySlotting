@@ -1,5 +1,9 @@
 # Ambientes do EasySlotting
 
+O repositório oficial é `https://github.com/easytecnologiainovacao/EasySlotting`.
+Use as branches `developing` para desenvolvimento, `staging` para homologação e
+`main` para produção.
+
 | Branch | Execução | Rails | Gems |
 | --- | --- | --- | --- |
 | developing | PC local | development | Desenvolvimento e testes disponíveis |

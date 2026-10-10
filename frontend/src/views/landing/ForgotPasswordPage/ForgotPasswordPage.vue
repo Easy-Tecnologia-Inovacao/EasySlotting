@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     class="forgot-page bg-body text-body min-vh-100 d-flex flex-column"
     :data-bs-theme="isDarkMode ? 'dark' : 'light'"
@@ -19,7 +19,7 @@
         <!-- Header -->
         <div class="text-center mb-4">
           <router-link to="/sistema/login" class="text-decoration-none">
-            <h2 class="fw-800 text-primary mb-1">EASYSLOTING</h2>
+            <h2 class="fw-800 text-primary mb-1">EASYSLOTTING</h2>
           </router-link>
           <p class="text-secondary small fw-600">Recupere sua senha</p>
         </div>
@@ -102,7 +102,7 @@
 import { ref, reactive, watch } from 'vue'
 import { api } from '@/services/api'
 
-const isDarkMode = ref(localStorage.getItem('easysloting_theme') === 'dark')
+const isDarkMode = ref(localStorage.getItem('easyslotting_theme') === 'dark')
 const loading = ref(false)
 const errorMsg = ref('')
 const emailSent = ref(false)
@@ -116,7 +116,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
   },
   { immediate: true }
 )

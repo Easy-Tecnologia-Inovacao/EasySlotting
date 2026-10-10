@@ -6,13 +6,16 @@
 
 class Customer < ApplicationRecord
   has_secure_password
+  DUMMY_PASSWORD_DIGEST = BCrypt::Password.create(SecureRandom.hex(32)).to_s.freeze
 
   include PasswordStrengthValidatable
+  include LoginProtection
 
   belongs_to :establishment
 
   has_many :appointments,            foreign_key: :customer_id, dependent: :nullify
   has_many :service_package_sales,   foreign_key: :customer_id, dependent: :nullify
+  has_many :customer_sessions, dependent: :delete_all
 
   # ── Validações ────────────────────────────────────────────────────────────
   validates :name, presence: true, length: { minimum: 2, maximum: 100 }
@@ -37,110 +40,17 @@ class Customer < ApplicationRecord
   before_create :set_initial_password_changed_at
   before_save :update_password_changed_at, if: :will_save_change_to_password_digest?
   before_save :invalidate_refresh_tokens, if: :will_save_change_to_password_digest?
+  after_save :revoke_auth_sessions!, if: -> { saved_change_to_password_digest? || (saved_change_to_active? && !active?) }
 
-  # ── Lockable ──────────────────────────────────────────────────────────────
-  MAX_FAILED_ATTEMPTS = 5
-  LOCK_DURATION = 30.minutes
-
-  def access_locked?
-    locked_at.present? && locked_at > LOCK_DURATION.ago
+  # O identificador no banco permite revogação imediata de access e refresh tokens.
+  def valid_auth_session?(session_id)
+    active? && establishment.active? && session_id.is_a?(String) && CustomerSession::SESSION_ID_PATTERN.match?(session_id) &&
+      customer_sessions.active.exists?(session_id: session_id)
   end
 
-  def increment_failed_attempts!
-    self.failed_attempts = (failed_attempts || 0) + 1
-    if failed_attempts >= MAX_FAILED_ATTEMPTS
-      self.locked_at = Time.current
-    end
-    save!(validate: false)
-  end
-
-  def reset_failed_attempts!
-    update_columns(failed_attempts: 0, locked_at: nil) if failed_attempts.to_i > 0 || locked_at.present?
-  end
-
-  # ── Helpers ───────────────────────────────────────────────────────────────
-  def active?
-    active
-  end
-
-  def trusted_device?(ip: nil, device_token: nil)
-    # Loopback e redes locais são confiáveis por padrão em dev/lan
-    if ip.present?
-      return true if ['127.0.0.1', '::1', 'localhost'].include?(ip)
-      return true if ip.start_with?('192.168.', '10.', '172.16.', '172.17.', '172.18.', '172.19.',
-                                    '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.',
-                                    '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.')
-    end
-
-    list = trusted_ips || []
-
-    # 1. Verificação por token de dispositivo persistente (OWASP Session Management)
-    return true if device_token.present? && list.include?("device:#{device_token}")
-
-    return true if ip.blank?
-
-    # 2. IP exato na lista
-    return true if list.include?(ip)
-
-    # 3. Tolerância a IP rotativo (modem/operadora) via sub-rede /24
-    parts = ip.split('.')
-    if parts.size == 4
-      subnet_prefix = parts[0..2].join('.')
-      return true if list.any? { |entry| entry == "subnet:#{subnet_prefix}" || entry.start_with?(subnet_prefix) }
-    end
-
-    false
-  end
-
-  def trusted_ip?(ip)
-    trusted_device?(ip: ip)
-  end
-
-  def add_trusted_device!(ip: nil, device_token: nil)
-    current_ips = (trusted_ips || []).dup
-
-    # Validação estrita de formato e tamanho do device_token (prevenção contra payload DoS / injeção)
-    if device_token.is_a?(String) && device_token.strip.match?(/\A[a-zA-Z0-9_\-]{8,64}\z/)
-      token_entry = "device:#{device_token.strip}"
-      current_ips << token_entry unless current_ips.include?(token_entry)
-    end
-
-    if ip.present?
-      clean_ip = ip.to_s.strip
-      current_ips << clean_ip unless current_ips.include?(clean_ip)
-      # Salva prefixo de sub-rede para acomodar rotação de IP no mesmo modem/provedor
-      parts = clean_ip.split('.')
-      if parts.size == 4
-        subnet_entry = "subnet:#{parts[0..2].join('.')}"
-        current_ips << subnet_entry unless current_ips.include?(subnet_entry)
-      end
-    end
-
-    # Mantém no máximo 30 entradas recentes
-    current_ips = current_ips.last(30)
-    update_columns(trusted_ips: current_ips)
-  end
-
-  def add_trusted_ip!(ip)
-    add_trusted_device!(ip: ip)
-  end
-
-  def generate_login_otp!
-    code = sprintf('%06d', SecureRandom.random_number(1_000_000))
-    update_columns(login_otp_code: code, login_otp_sent_at: Time.current)
-    code
-  end
-
-  def verify_login_otp(code)
-    return false if login_otp_code.blank? || login_otp_sent_at.blank?
-    return false if login_otp_sent_at < 10.minutes.ago
-
-    if ActiveSupport::SecurityUtils.secure_compare(login_otp_code.to_s.strip, code.to_s.strip)
-      update_columns(login_otp_code: nil, login_otp_sent_at: nil)
-      true
-    else
-      false
-    end
+  def revoke_auth_sessions!
+    customer_sessions.delete_all
+    customer_sessions.reset
   end
 
   def as_safe_json
@@ -154,6 +64,9 @@ class Customer < ApplicationRecord
       :reset_password_sent_at,
       :refresh_token,
       :refresh_token_expires_at,
+      :auth_session_id,
+      :first_login_at,
+      :login_otp_attempts,
       :consent_terms_at,
       :consent_privacy_at,
       :login_otp_code,
@@ -176,6 +89,9 @@ class Customer < ApplicationRecord
 
   # Invalida todos os refresh tokens ao mudar a senha (segurança)
   def invalidate_refresh_tokens
+    self.auth_session_id = nil
+    self.login_otp_code = nil
+    self.login_otp_sent_at = nil
     self.refresh_token = nil
     self.refresh_token_expires_at = nil
   end

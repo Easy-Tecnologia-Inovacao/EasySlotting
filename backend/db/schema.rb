@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_23_100005) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_09_160000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -190,8 +190,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_23_100005) do
     t.index ["status"], name: "index_commissions_on_status"
   end
 
+  create_table "customer_sessions", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "csrf_token_digest", null: false
+    t.bigint "customer_id", null: false
+    t.datetime "expires_at", null: false
+    t.string "refresh_token_digest", null: false
+    t.uuid "session_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["customer_id", "expires_at"], name: "index_customer_sessions_on_customer_id_and_expires_at"
+    t.index ["customer_id"], name: "index_customer_sessions_on_customer_id"
+    t.index ["session_id"], name: "index_customer_sessions_on_session_id", unique: true
+  end
+
   create_table "customers", force: :cascade do |t|
     t.boolean "active", default: true, null: false
+    t.string "auth_session_id"
     t.string "cellphone"
     t.datetime "consent_privacy_at"
     t.datetime "consent_terms_at"
@@ -199,8 +213,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_23_100005) do
     t.string "email", null: false
     t.bigint "establishment_id", null: false
     t.integer "failed_attempts", default: 0, null: false
+    t.datetime "first_login_at"
     t.string "image"
     t.datetime "locked_at"
+    t.integer "login_otp_attempts", default: 0, null: false
     t.string "login_otp_code"
     t.datetime "login_otp_sent_at"
     t.string "name", null: false
@@ -378,6 +394,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_23_100005) do
     t.boolean "highlight", default: false, null: false
     t.integer "max_appointments_per_month"
     t.integer "max_employees"
+    t.integer "max_owner_sessions", default: 1, null: false
     t.integer "max_services"
     t.string "name", null: false
     t.decimal "price", precision: 10, scale: 2, default: "0.0", null: false
@@ -389,6 +406,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_23_100005) do
     t.datetime "updated_at", null: false
     t.index ["active"], name: "index_plans_on_active"
     t.index ["code"], name: "index_plans_on_code", unique: true
+    t.index ["max_owner_sessions"], name: "index_plans_on_unique_active_owner_sessions", unique: true, where: "(active = true)"
+    t.check_constraint "max_owner_sessions >= 1 AND max_owner_sessions <= 4", name: "plans_max_owner_sessions_range"
   end
 
   create_table "service_package_sales", force: :cascade do |t|
@@ -629,8 +648,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_23_100005) do
     t.string "email", null: false
     t.string "encrypted_password", default: "", null: false
     t.integer "failed_attempts", default: 0, null: false
+    t.datetime "first_login_at"
     t.string "image"
     t.datetime "locked_at"
+    t.integer "login_otp_attempts", default: 0, null: false
     t.string "login_otp_code"
     t.datetime "login_otp_sent_at"
     t.string "name"
@@ -651,6 +672,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_23_100005) do
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
     t.index ["role"], name: "index_users_on_role"
+    t.index ["role"], name: "index_users_on_single_super_admin", unique: true, where: "((role)::text = 'super_admin'::text)"
     t.index ["uid", "provider"], name: "index_users_on_uid_and_provider", unique: true
     t.index ["unlock_token"], name: "index_users_on_unlock_token", unique: true
   end
@@ -680,6 +702,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_23_100005) do
   add_foreign_key "commissions", "establishment_memberships", column: "membership_id"
   add_foreign_key "commissions", "establishments"
   add_foreign_key "commissions", "users", column: "employee_id"
+  add_foreign_key "customer_sessions", "customers"
   add_foreign_key "customers", "establishments"
   add_foreign_key "employee_schedule_exceptions", "users"
   add_foreign_key "employee_services", "services"

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="register-page bg-body text-body min-vh-100" :data-bs-theme="isDarkMode ? 'dark' : 'light'">
     <div class="theme-switch-wrapper">
       <input type="checkbox" id="darkToggle" class="d-none" v-model="isDarkMode">
@@ -14,7 +14,7 @@
         <div class="login-card shadow-lg">
           <div class="text-center mb-4">
             <router-link to="/" class="text-decoration-none">
-              <h2 class="fw-800 text-primary mb-1">EASYSLOTING</h2>
+              <h2 class="fw-800 text-primary mb-1">EASYSLOTTING</h2>
             </router-link>
             <p class="text-secondary small fw-600">Crie sua conta empresarial em 2 etapas</p>
           </div>
@@ -229,7 +229,7 @@ import { useRouter } from 'vue-router'
 import { api } from '@/services/api'
 
 const router = useRouter()
-const isDarkMode = ref(localStorage.getItem('easysloting_theme') === 'dark')
+const isDarkMode = ref(localStorage.getItem('easyslotting_theme') === 'dark')
 const loading = ref(false)
 const currentStep = ref(1)
 
@@ -252,18 +252,18 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
   },
   { immediate: true }
 )
 
 const nextStep = () => {
   // Validações básicas do passo 1 antes de avançar
-  if (!form.owner_name || !form.email || !form.cnpj || !form.category || !form.password) {
+  if (!form.owner_name.trim() || !form.email.trim() || !form.cnpj || !form.category || !form.password) {
     alert('Por favor, preencha todos os campos obrigatórios do Passo 1.')
     return
   }
-  if (form.category === 'Outro' && !form.custom_category) {
+  if (form.category === 'Outro' && !form.custom_category.trim()) {
     alert('Por favor, especifique o seu ramo de atuação.')
     return
   }
@@ -281,7 +281,7 @@ const nextStep = () => {
   if (!/[0-9]/.test(p)) errors.push('pelo menos um número')
   if (!/[^A-Za-z0-9]/.test(p)) errors.push('pelo menos um caractere especial')
 
-  const obviousWords = ['admin', 'senha', 'password', '123456', 'easysloting', 'agendamento', 'barbearia']
+  const obviousWords = ['admin', 'senha', 'password', '123456', 'easyslotting', 'agendamento', 'barbearia']
   for (const word of obviousWords) {
     if (p.toLowerCase().includes(word)) {
       errors.push(`não pode conter termos óbvios como '${word}'`)
@@ -335,8 +335,9 @@ const onWhatsappInput = (e) => {
 
 const sanitizeField = (field) => {
   if (form[field]) {
-    // Remove caracteres que podem ser usados para XSS ou injeção
-    form[field] = form[field].replace(/[<>]/g, '').trim()
+    // Remove caracteres perigosos sem cortar o espaço que o usuário acabou de digitar.
+    // O trim das extremidades acontece na validação/envio do formulário.
+    form[field] = form[field].replace(/[<>]/g, '')
   }
 }
 
@@ -354,36 +355,25 @@ const onlyDigits = (value) => value ? value.replace(/\D/g, '') : ''
 const handleSubmit = async () => {
   const payload = {
     user: {
-      name: form.owner_name,
-      email: form.email,
+      name: form.owner_name.trim(),
+      email: form.email.trim(),
       password: form.password,
       password_confirmation: form.password_confirmation
     },
     establishment: {
-      name: form.business_name,
+      name: form.business_name.trim(),
       slug: slugify(form.business_name),
       cnpj: onlyDigits(form.cnpj),
-      category: form.category === 'Outro' ? form.custom_category : form.category,
+      category: (form.category === 'Outro' ? form.custom_category : form.category).trim(),
       phone: onlyDigits(form.fixed_phone),
       whatsapp: onlyDigits(form.whatsapp),
-      address: form.address
+      address: form.address.trim()
     }
   }
 
   try {
     loading.value = true
     const response = await api.post('/owner_onboarding', payload)
-
-    const accessToken = response.headers['access-token'] || ''
-    const client = response.headers['client'] || ''
-    const uid = response.headers['uid'] || ''
-    const user = response.data?.user || response.data?.data?.user || {}
-
-    localStorage.setItem('access-token', accessToken)
-    localStorage.setItem('client', client)
-    localStorage.setItem('uid', uid)
-    localStorage.setItem('user', JSON.stringify(user))
-    localStorage.setItem('role', user?.role || '')
 
     alert(response.data?.message || 'Conta empresarial criada com sucesso!')
     router.push('/sistema/login')

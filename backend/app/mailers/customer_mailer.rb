@@ -3,7 +3,7 @@ class CustomerMailer < ApplicationMailer
   def password_reset(customer, reset_url)
     @customer = customer
     @reset_url = reset_url
-    @establishment_name = customer.establishment&.name || 'EasySloting'
+    @establishment_name = customer.establishment&.name || 'EasySlotting'
 
     mail(
       to: @customer.email,
@@ -18,7 +18,7 @@ class CustomerMailer < ApplicationMailer
 
     mail(
       to: @customer.email,
-      subject: "Crie sua conta em #{establishment.name} - EasySloting"
+      subject: "Crie sua conta em #{establishment.name} - EasySlotting"
     )
   end
 end

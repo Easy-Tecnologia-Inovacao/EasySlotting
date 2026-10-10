@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     class="reset-page bg-body text-body min-vh-100 d-flex flex-column"
     :data-bs-theme="isDarkMode ? 'dark' : 'light'"
@@ -161,7 +161,7 @@ import { useThemeStore } from '@/stores/themeStore'
 const route = useRoute()
 const store = useThemeStore()
 
-const isDarkMode = ref(localStorage.getItem('easysloting_theme') === 'dark')
+const isDarkMode = ref(localStorage.getItem('easyslotting_theme') === 'dark')
 const loading = ref(false)
 const errorMsg = ref('')
 const resetSuccess = ref(false)
@@ -179,7 +179,7 @@ const currentSlug = computed(() =>
   ''
 )
 
-const establishmentName = computed(() => store.salonConfig?.nome || 'EasySloting')
+const establishmentName = computed(() => store.salonConfig?.nome || 'EasySlotting')
 
 const backRoute = computed(() =>
   currentSlug.value ? `/empresa/${currentSlug.value}` : '/'
@@ -219,7 +219,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
     store.isDarkMode = newVal
   },
   { immediate: true }

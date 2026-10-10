@@ -3,6 +3,12 @@
 > Sistema completo de agendamento para estabelecimentos de beleza e estética (barbearias, salões, clínicas e similares).  
 > Arquitetura **multi-tenant** com backend **Ruby on Rails 8 API** + frontend **Vue 3 + TypeScript**.
 
+Referências de autenticação: [guia técnico de login, sessão, OTP e logout](docs/authentication.md) e [relatório de revisão de segurança](docs/authentication-security-review.md). O guia descreve os contratos atuais e como ampliar o sistema.
+
+Para criar novas opções de exclusão, consulte a [referência de exclusão de contas por perfil](docs/account-deletion.md), com o fluxo dos clientes e pendências de owner/funcionário.
+
+O [guia de sessões simultâneas por plano](docs/owner-sessions.md) descreve as faixas exclusivas, preços/sessões crescentes e limites de 1 a 4 por conta do proprietário ou funcionário. A [política por perfil](docs/session-policy.md) cobre super admin único com cinco sessões e clientes sem teto de aparelhos.
+
 ---
 
 ## 🗂️ Sumário
@@ -47,7 +53,7 @@ Cada empresa contratante assina um **plano mensal** e gerencia sua equipe, servi
 | **Ruby on Rails**     | 8.1.2  | Framework principal (API-only)        |
 | **PostgreSQL**        | latest | Banco de dados relacional             |
 | **Devise**            | latest | Autenticação base para staff          |
-| **Devise Token Auth** | ~1.2.6 | Tokens JWT para owner/employee        |
+| **Devise Token Auth** | ~1.2.6 | Tokens opacos para staff, com rotação  |
 | **JWT (`jwt` gem)**   | ~2.8   | Auth JWT própria para clientes        |
 | **BCrypt**            | ~3.1.7 | Hash de senhas de clientes            |
 | **Rack::CORS**        | latest | Controle de origens cruzadas          |
@@ -67,7 +73,7 @@ Cada empresa contratante assina um **plano mensal** e gerencia sua equipe, servi
 | **TypeScript**             | ~5.9.3  | Tipagem estática                     |
 | **Vite**                   | ^7.3.1  | Build tool e dev server              |
 | **Pinia**                  | ^3.0.4  | Gerenciamento de estado global       |
-| **Vue Router**             | ^5.0.3  | Roteamento com guards de autorização |
+| **Vue Router**             | ^5.0.3  | Guards de navegação; autorização no Rails |
 | **Bootstrap 5**            | ^5.3.8  | Componentes e grid system            |
 | **Bootstrap Icons**        | ^1.13.1 | Biblioteca de ícones                 |
 | **Chart.js + vue-chartjs** | ^4.5.1  | Gráficos financeiros interativos     |
@@ -154,20 +160,28 @@ Agendamento/
 
 ### 🔐 1. Autenticação Dupla (Staff + Cliente)
 
-#### Staff — Dono e Funcionários
+#### Staff — Dono, Funcionários e Super Admin
 
 - Login/logout via **Devise Token Auth** (tokens no header `access-token`)
+- Token em memória, metadados/CSRF em `sessionStorage` e rotação nas chamadas; [recuperação segura após F5](docs/staff-session-recovery.md) via cookie criptografado HttpOnly, sem consumir outra vaga de sessão
+- Owner e cada funcionário: de 1 a 4 sessões conforme o plano do proprietário, com quotas independentes e sem somar benefícios. Super admin: uma conta no sistema, até cinco sessões. Listagem/revogação das próprias sessões no servidor
 - Recuperação e redefinição de senha por e-mail
-- **Expiração de senha a cada 7 dias** (NIST/OWASP) — bloqueia acesso ao expirar e redireciona para troca
-- Confirmação de e-mail via link
+- Política atual de senha: **90 dias**; o Rails bloqueia escritas quando expirada, com exceções para manutenção da conta/autenticação
+- Primeiro login e IP desconhecido exigem OTP por e-mail para os quatro perfis; IP já reconhecido permite login com senha, inclusive em outro navegador
+- Cadastro cria owner sem sessão automática; super admin é configurado explicitamente no bootstrap
 
 #### Clientes — Isolados por Estabelecimento
 
 - Autenticação própria com **BCrypt + JWT** sem Devise
 - Registro em `/api/customer_auth/:slug/sign_up` — o slug do estabelecimento faz parte da URL
 - Unicidade de e-mail composta: `[email + establishment_id]` — mesmo e-mail pode existir em múltiplos estabelecimentos
-- **Expiração de senha a cada 7 dias** — redireciona para `/minha-conta` para forçar troca
-- Serviço `CustomerJsonWebToken` gerencia emissão, validação e expiração dos tokens
+- Access JWT de 15 minutos em `sessionStorage`; refresh em cookie criptografado HttpOnly de sete dias, com rotação e CSRF
+- **Múltiplas sessões por cliente, sem teto comercial**: novo login preserva outros aparelhos; logout revoga apenas a sessão atual. Refresh com rotação e prazo absoluto de sete dias
+- Política atual de senha: **90 dias**; troca/redefinição e logout revogam também o access JWT pelo estado de sessão no banco
+- Serviço `CustomerJsonWebToken` verifica assinatura, emissor, audiência, expiração e tipo; o servidor também confere conta, estabelecimento e `sid`
+- Cadastro encaminha para login; primeiro acesso e OTP seguem a regra compartilhada com staff
+
+Veja os fluxos, exceções e contratos no [guia de autenticação](docs/authentication.md) e na [verificação por e-mail](docs/email-login-verification.md). Somente e-mail está disponível; as proteções implementadas não representam certificação LGPD/OWASP.
 
 #### Força de Senha (válida para ambos)
 
@@ -177,8 +191,8 @@ Agendamento/
 ✓ Pelo menos 1 letra minúscula
 ✓ Pelo menos 1 número
 ✓ Pelo menos 1 caractere especial
-✗ Não pode conter nome do usuário
-✗ Não pode conter parte do e-mail
+✗ Não pode conter o primeiro nome quando ele tem ao menos 4 caracteres
+✗ Não pode conter o prefixo do e-mail quando ele tem ao menos 4 caracteres
 ✗ Não pode conter termos óbvios (admin, senha, 123456, agendamento...)
 ✗ Não pode ser igual à senha anterior (comparação via BCrypt)
 ```
@@ -197,9 +211,9 @@ Cada estabelecimento tem um slug único gerado no cadastro:
 /empresa/barbearia-do-joao/minha-conta   ← Área logada do cliente
 ```
 
-- O slug é persistido em `localStorage` e `sessionStorage` durante a navegação
+- O slug da sessão de cliente fica em `sessionStorage`; o slug da página pública é um contexto separado
 - Todos os dados do estabelecimento retornam com o tema customizado
-- Clientes são **100% isolados** — sem acesso cruzado entre empresas
+- O servidor limita o acesso de clientes à conta e ao estabelecimento autenticados; testes cobrem tentativas de acesso cruzado
 
 ---
 
@@ -414,14 +428,20 @@ Cada `EstablishmentMembership` tem flags independentes configuradas pelo dono:
 
 ## 🔒 Segurança em Camadas
 
-### Rack::Attack — 11 Regras de Rate Limiting
+### Rack::Attack — Regras principais de Rate Limiting
+
+Resumo das regras; a lista completa está em `backend/config/initializers/rack_attack.rb`. Limites por IP são compartilhados pelos aparelhos na mesma rede.
 
 | Regra                    | Limite       | Período | Proteção                         |
 | ------------------------ | ------------ | ------- | -------------------------------- |
 | `req/ip`                 | 100 req      | 1 min   | DoS genérico                     |
 | `logins/staff`           | 5 tentativas | 1 min   | Brute force no login do staff    |
-| `logins/customer`        | 5 tentativas | 1 min   | Brute force no login do cliente  |
+| `logins/staff/email`     | 5 tentativas | 1 min   | Tentativas por conta staff       |
+| `logins/customer/ip`     | 5 tentativas | 1 min   | Brute force no login do cliente  |
+| `logins/customer/email`  | 5 tentativas | 1 min   | Tentativas por conta/slug        |
+| `customer_refresh/ip`    | 10 req       | 1 min   | Abuso de renovação de sessão     |
 | `password_resets/ip`     | 3 req        | 5 min   | Email flooding (reset de senha)  |
+| `change_password/ip`     | 5 req        | 10 min  | Tentativas de troca de senha     |
 | `uploads/ip`             | 5 req        | 1 min   | DoS por upload massivo           |
 | `admin/ip`               | 45 req       | 1 min   | Scraping de endpoints admin      |
 | `services_write/ip`      | 15 req       | 1 min   | Cadastros automatizados massivos |
@@ -442,7 +462,7 @@ Resposta customizada ao bloquear: `HTTP 429` com header `Retry-After` e mensagem
 
 ### Sanitização de Dados (Anti-XSS)
 
-Todos os campos de texto passam por `ActionView::Base.full_sanitizer.sanitize()` via `before_validation` antes de persistir no banco. Isso se aplica a todos os models: `User`, `Customer`, `Establishment`, `Appointment`, `Service`, `StockItem`, etc.
+`User` e `Customer` sanitizam campos de perfil selecionados em callbacks. Senhas não passam por sanitização HTML ou remoção de espaços no backend de login. Cada nova entrada precisa de validação no servidor; sanitização não substitui autorização, validação de formato nem renderização segura no Vue.
 
 ### Auditoria Estática
 
@@ -451,6 +471,8 @@ Todos os campos de texto passam por `ActionView::Base.full_sanitizer.sanitize()`
 ### Tokens seguros
 
 - Respostas JSON nunca expõem `encrypted_password`, `tokens`, `confirmation_token`, `reset_password_token`, `password_digest` (via `as_json`)
+- Credenciais de sessão na query string são rejeitadas; respostas sensíveis usam `Cache-Control: no-store`
+- Logout, troca de senha e respostas atrasadas são tratados no servidor e nos helpers Vue; consulte [revogação e limites](docs/authentication.md#logout-e-revogação)
 
 ### Lock Pessimista no Estoque
 
@@ -531,15 +553,16 @@ POST   /api/register                  ← Cadastro de owner
 ### Onboarding
 
 ```
-POST   /api/owner_onboarding          ← Configura estabelecimento após cadastro
+POST   /api/owner_onboarding          ← Cria owner, estabelecimento e vínculo em uma transação
 ```
 
 ### Conta do Usuário
 
 ```
-GET    /api/me/establishment
-PUT    /api/me/establishment
 PATCH  /api/me/change_password
+GET    /api/me/sessions
+DELETE /api/me/sessions/:client_id
+DELETE /api/me/sessions               ← Revoga outras sessões staff
 GET    /api/me/subscription
 ```
 
@@ -555,6 +578,10 @@ PATCH  /api/subscriptions/:id/cancel
 ```
 POST   /api/customer_auth/:slug/sign_up
 POST   /api/customer_auth/:slug/sign_in
+POST   /api/customer_auth/:slug/refresh
+DELETE /api/customer_auth/:slug/sign_out
+POST   /api/customer_auth/:slug/forgot_password
+PUT    /api/customer_auth/:slug/reset_password
 ```
 
 ### Admin — Estabelecimento
@@ -749,15 +776,21 @@ cd agendamento/frontend
 # Instalar dependências
 npm install
 
-# Configurar variável de ambiente
+# Copiar o exemplo de configuração (opcional no desenvolvimento)
 cp .env.example .env
-# Defina: VITE_API_URL=http://localhost:3000
+# O dev server usa /api e encaminha ao Rails em 127.0.0.1:3000.
+# VITE_API_URL configura somente o build de produção.
 
 # Iniciar dev server (acessível na rede local)
 npm run dev -- --host 0.0.0.0
 ```
 
-Acesse em `http://localhost:5173`
+Acesse em `http://localhost:5173` ou pelo IP da máquina na porta 5173.
+Em desenvolvimento, o navegador chama `/api` no mesmo endereço da página;
+o proxy Vite encaminha ao Rails na porta 3000. Isso mantém os cookies de login
+no mesmo host ao acessar por IP LAN. Uma configuração antiga de `VITE_API_URL`
+com `localhost` é ignorada pelo dev server. Após mudar `vite.config.ts`, reinicie
+`npm run dev`; faça um novo login para emitir o cookie no host usado na página.
 
 ### Outros comandos úteis
 
@@ -782,8 +815,8 @@ DEVISE_JWT_SECRET_KEY=...
 CUSTOMER_JWT_SECRET=...
 RAILS_ENV=development
 
-# Frontend (.env)
-VITE_API_URL=http://localhost:3000
+# Frontend (build de staging/produção, com proxy /api no servidor)
+VITE_API_URL=/api
 ```
 
 ---
@@ -819,7 +852,7 @@ Este projeto possui **12 skills especializadas** em `.skills/` que podem ser aci
 | --------------------------------------------- | -------------- |
 | Autenticação Staff (Devise Token Auth)        | ✅ Completo    |
 | Autenticação Cliente (JWT próprio + BCrypt)   | ✅ Completo    |
-| Força de senha e expiração (NIST/OWASP)       | ✅ Completo    |
+| Validação de força de senha e política de 90 dias | ✅ Implementado |
 | Multi-tenant por Slug                         | ✅ Completo    |
 | Portal Público do Estabelecimento             | ✅ Completo    |
 | Fluxo completo de Agendamento (cliente)       | ✅ Completo    |

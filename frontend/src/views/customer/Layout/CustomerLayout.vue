@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     :data-bs-theme="store.isDarkMode ? 'dark' : 'light'"
     class="app-wrapper min-vh-100 d-flex flex-column"
@@ -234,6 +234,12 @@
             </p>
 
             <div class="mb-3">
+              <label class="form-label fw-bold small text-muted">Senha atual</label>
+              <input type="password" class="form-control rounded-3" v-model="passwordForm.current_password"
+                autocomplete="current-password" placeholder="Digite sua senha atual" maxlength="128" />
+            </div>
+
+            <div class="mb-3">
               <label class="form-label fw-bold small text-muted">Nova senha</label>
               <input
                 type="password"
@@ -351,7 +357,7 @@
             <button
               class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm"
               @click="salvarNovaSenha"
-              :disabled="savingPassword || !isPasswordValid"
+              :disabled="savingPassword || !isPasswordValid || !passwordForm.current_password"
             >
               {{ savingPassword ? 'Salvando...' : 'Salvar nova senha' }}
             </button>
@@ -368,7 +374,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import { useRouter, useRoute } from 'vue-router'
 import { Offcanvas, Modal, Dropdown } from 'bootstrap'
 import { getCustomerData, clearCustomerSession } from '@/services/customerAuth'
-import { api } from '@/services/api'
+import { api, logoutCustomer } from '@/services/api'
 
 const store = useThemeStore()
 const router = useRouter()
@@ -407,7 +413,7 @@ const currentSlug = computed(() => {
 })
 
 const siteName = computed(() => {
-  return store.salonConfig?.nome || 'EasySloting'
+  return store.salonConfig?.nome || 'EasySlotting'
 })
 
 const siteHomeRoute = computed(() => {
@@ -496,7 +502,7 @@ const closeSidebarOnMobile = () => {
 const logout = async () => {
   try {
     // Invalida o refresh token no backend
-    await api.delete(`/customer_auth/${currentSlug.value}/sign_out`)
+    await logoutCustomer()
   } catch {
     // Ignora erro — limpa local mesmo assim
   }
@@ -524,6 +530,7 @@ const logout = async () => {
 const savingPassword = ref(false)
 const passwordError = ref('')
 const passwordForm = ref({
+  current_password: '',
   password: '',
   password_confirmation: ''
 })
@@ -558,7 +565,7 @@ const passwordRules = computed(() => {
   const hasSymbol = /[^A-Za-z0-9]/.test(p)
 
   // Palavras óbvias
-  const obviousWords = ['admin', 'senha', 'password', '123456', 'easysloting', 'agendamento', 'barbearia']
+  const obviousWords = ['admin', 'senha', 'password', '123456', 'easyslotting', 'agendamento', 'barbearia']
   let noObviousWords = true
   const lowerP = p.toLowerCase()
   for (const word of obviousWords) {
@@ -688,6 +695,7 @@ async function salvarNovaSenha() {
     savingPassword.value = true
 
     await api.post('/customer/profile/change_password', {
+      current_password: passwordForm.value.current_password,
       password: passwordForm.value.password,
       password_confirmation: passwordForm.value.password_confirmation
     })
@@ -705,7 +713,10 @@ async function salvarNovaSenha() {
       limparBackdropsModal()
     }, 350)
 
-    alert('Sua senha foi alterada com sucesso! Para sua segurança, continue mantendo sua senha atualizada.')
+    const slug = currentSlug.value
+    clearCustomerSession()
+    alert('Senha alterada com sucesso. Faça login novamente.')
+    router.push(slug ? '/empresa/' + encodeURIComponent(slug) + '/login' : '/cliente/login')
   } catch (error: any) {
     passwordError.value =
       error.response?.data?.errors?.join(', ') ||
@@ -722,7 +733,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
   },
   { immediate: true }
 )
@@ -746,7 +757,7 @@ onMounted(async () => {
     }
   })
 
-  const savedTheme = localStorage.getItem('easysloting_theme')
+  const savedTheme = localStorage.getItem('easyslotting_theme')
   store.isDarkMode = savedTheme === 'dark'
 
   document.documentElement.setAttribute(

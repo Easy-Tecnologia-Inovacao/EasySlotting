@@ -18,6 +18,7 @@ Rails.application.routes.draw do
     end
 
     post '/owner_onboarding', to: 'account/onboarding#create'
+    post '/devise_users/restore_session', to: 'devise_users/session_recovery#create'
 
     # =========================
     # AUTH DE CUSTOMERS (por estabelecimento)
@@ -94,6 +95,9 @@ Rails.application.routes.draw do
     # CLIENTE (LOGADO) - (Mapeados para a pasta customer/)
     # =========================
     namespace :customer do
+      resources :sessions, only: [:index, :destroy] do
+        delete :destroy_others, on: :collection
+      end
       resource :profile, controller: 'profile', only: [:show, :update, :destroy] do
         post :upload_image
         post :change_password
@@ -198,12 +202,13 @@ Rails.application.routes.draw do
     # =========================
     namespace :super_admin do
       get '/dashboard', to: 'dashboard#index'
-      resources :plans, only: [:index, :create, :update]
+      resources :plans, only: [:index, :create, :update, :destroy]
 
       # Audit Logs - Visualização de logs de segurança
       resources :audit_logs, only: [:index] do
         collection do
           get :security_summary
+          get :filter_options
         end
       end
     end

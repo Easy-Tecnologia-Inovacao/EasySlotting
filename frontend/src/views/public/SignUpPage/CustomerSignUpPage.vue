@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="register-page bg-body text-body min-vh-100 d-flex flex-column position-relative" :data-bs-theme="isDarkMode ? 'dark' : 'light'">
 
     <!-- Theme toggle idêntico ao login -->
@@ -248,14 +248,13 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { api, getOrCreateDeviceToken } from '@/services/api'
-import { saveCustomerSession, clearCustomerSession } from '@/services/customerAuth'
 import { useThemeStore } from '@/stores/themeStore'
 
 const router = useRouter()
 const route  = useRoute()
 const store  = useThemeStore()
 
-const isDarkMode = ref(localStorage.getItem('easysloting_theme') === 'dark')
+const isDarkMode = ref(localStorage.getItem('easyslotting_theme') === 'dark')
 const loading    = ref(false)
 const errorMsg   = ref('')
 const successMsg = ref('')
@@ -305,7 +304,7 @@ function validatePasswordStrength(password: string): string[] {
   if (!/[a-z]/.test(password)) errors.push('Pelo menos 1 letra minúscula')
   if (!/[0-9]/.test(password)) errors.push('Pelo menos 1 número')
   if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) errors.push('Pelo menos 1 caractere especial')
-  const obviousWords = ['admin', 'senha', 'password', '123456', 'easysloting', 'agendamento', 'barbearia']
+  const obviousWords = ['admin', 'senha', 'password', '123456', 'easyslotting', 'agendamento', 'barbearia']
   const lowerPass = password.toLowerCase()
   for (const word of obviousWords) {
     if (lowerPass.includes(word)) errors.push(`Não pode conter "${word}"`)
@@ -325,7 +324,7 @@ const currentSlug = computed(() =>
   ''
 )
 
-const establishmentName = computed(() => store.salonConfig?.nome || 'EasySloting')
+const establishmentName = computed(() => store.salonConfig?.nome || 'EasySlotting')
 
 const backRoute = computed(() =>
   currentSlug.value ? `/empresa/${currentSlug.value}` : '/'
@@ -353,7 +352,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
     store.isDarkMode = newVal
   },
   { immediate: true }
@@ -446,24 +445,8 @@ const handleRegister = async () => {
 
     const response = await api.post(`/customer_auth/${currentSlug.value}/sign_up`, payload)
 
-    const { access_token, expires_in, csrf_token, customer } = response.data
-
-    clearCustomerSession()
-    saveCustomerSession(access_token, customer, currentSlug.value, false, expires_in, csrf_token)
-
-    successMsg.value = 'Conta criada com sucesso! Redirecionando...'
-
-    const redirectQuery = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : ''
-    const isSafeRedirect =
-      redirectQuery.length > 0 &&
-      !redirectQuery.startsWith('//') &&
-      !redirectQuery.startsWith('/\\') &&
-      !redirectQuery.includes('://') &&
-      (redirectQuery === `/empresa/${currentSlug.value}` || redirectQuery.startsWith(`/empresa/${currentSlug.value}/`))
-
-    const redirectTo = isSafeRedirect ? redirectQuery : `/empresa/${currentSlug.value}/minha-conta`
-
-    setTimeout(() => router.push(redirectTo), 600)
+    successMsg.value = 'Conta criada com sucesso! Faça login para continuar.'
+    setTimeout(() => router.push('/empresa/' + encodeURIComponent(currentSlug.value) + '/login'), 600)
 
   } catch (error: any) {
     const errs = error.response?.data?.errors

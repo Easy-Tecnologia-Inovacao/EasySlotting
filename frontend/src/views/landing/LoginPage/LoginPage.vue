@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     class="login-page bg-body text-body min-vh-100 d-flex flex-column"
     :data-bs-theme="isDarkMode ? 'dark' : 'light'"
@@ -19,7 +19,7 @@
         <!-- Header -->
         <div class="text-center mb-4">
           <router-link to="/" class="text-decoration-none">
-            <h2 class="fw-800 text-primary mb-1">EASYSLOTING</h2>
+            <h2 class="fw-800 text-primary mb-1">EASYSLOTTING</h2>
           </router-link>
           <p class="text-secondary small fw-600">Acesse a área da empresa</p>
         </div>
@@ -75,17 +75,9 @@
             </div>
           </div>
 
-          <div class="mb-4">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="sistemaRemember" v-model="form.remember" />
-              <label class="form-check-label small text-body fw-semibold" for="sistemaRemember">
-                Lembrar este dispositivo
-              </label>
-              <div class="text-muted extra-small mt-1">
-                Reconhece seu navegador mesmo se o IP rotativo do modem mudar.
-              </div>
-            </div>
-          </div>
+          <p class="text-muted extra-small mb-4">
+            No primeiro acesso ou em um IP novo, enviaremos um código ao seu e-mail.
+          </p>
 
           <button
             type="submit"
@@ -110,14 +102,14 @@
             </p>
           </div>
 
-          <!-- Conformidade LGPD & Segurança -->
+          <!-- Informações sobre segurança e dados de conexão -->
           <div class="lgpd-container mt-4 pt-3 border-top text-center">
             <div class="d-flex align-items-center justify-content-center gap-1 text-success extra-small fw-bold mb-1">
               <i class="bi bi-shield-check"></i>
-              <span>Ambiente Protegido & Conformidade LGPD</span>
+              <span>Segurança da conta</span>
             </div>
             <p class="text-muted extra-small mb-0 line-height-sm">
-              Dados de conexão (IP e dispositivo) são tratados estritamente para segurança e prevenção a fraudes (Art. 7º, IX da Lei 13.709/2018).
+              Usamos dados de conexão, como IP e navegador, para verificar acessos e gerenciar suas sessões.
             </p>
             <div class="mt-1">
               <a href="#" class="extra-small text-decoration-none text-primary fw-semibold" @click.prevent="showPrivacyModal = true">
@@ -129,11 +121,13 @@
       </div>
     </div>
 
-    <!-- Modal de Verificação de Novo Dispositivo (Estilo Discord / E-mail / 2FA) -->
+    <!-- Confirmação por e-mail no primeiro acesso ou em IP desconhecido -->
     <LoginVerificationModal
       :show="showVerificationModal"
       :email-masked="maskedEmail"
       :error-msg="verificationError"
+      :loading="loading"
+      :resending="resendingOtp"
       @verify="handleVerifyOtp"
       @cancel="showVerificationModal = false"
       @resend="handleResendOtp"
@@ -153,7 +147,7 @@
           <div class="modal-header border-0 pb-0">
             <h5 class="modal-title fw-800 text-body d-flex align-items-center gap-2">
               <i class="bi bi-shield-check text-success"></i>
-              Segurança & Proteção de Dados (LGPD)
+              Segurança e dados de conexão
             </h5>
             <button
               type="button"
@@ -165,17 +159,17 @@
           <div class="modal-body px-4 py-3 small text-secondary">
             <h6 class="fw-bold text-body mb-2">1. Dados de Conexão Coletados</h6>
             <p class="mb-3">
-              Para proteger sua conta contra invasões e acessos não autorizados, registramos de forma segura seu <strong>endereço IP</strong>, <strong>tipo de dispositivo/navegador</strong> e <strong>horário de acesso</strong>, conforme previsto no Art. 7º, inciso IX da LGPD (Legítimo Interesse e Segurança do Titular) e Art. 15 do Marco Civil da Internet.
+              Registramos seu <strong>endereço IP</strong>, <strong>tipo de dispositivo/navegador</strong> e <strong>horário de acesso</strong> para verificar logins, registrar eventos de segurança e permitir o gerenciamento das sessões.
             </p>
 
-            <h6 class="fw-bold text-body mb-2">2. Resiliência a IPs Rotativos & Dispositivo Confiável</h6>
+            <h6 class="fw-bold text-body mb-2">2. Verificação por e-mail</h6>
             <p class="mb-3">
-              Ao marcar "Lembrar este dispositivo", um identificador seguro (Device Token) é registrado para reconhecer seu navegador mesmo quando o modem reiniciar ou o IP rotativo da sua operadora mudar, evitando solicitações repetidas de autenticação em dois fatores.
+              Pedimos um código enviado ao seu e-mail no primeiro login e ao entrar por um IP ainda não reconhecido. Aparelhos na mesma rede podem compartilhar o IP e dispensar outro código. Mudar de IP pode exigir uma nova confirmação, mesmo no mesmo aparelho.
             </p>
 
-            <h6 class="fw-bold text-body mb-2">3. Boas Práticas OWASP</h6>
+            <h6 class="fw-bold text-body mb-2">3. Controle de acessos</h6>
             <p class="mb-0">
-              Nossa plataforma implementa criptografia de ponta a ponta para credenciais, bloqueio progressivo contra ataques de força bruta e logs de auditoria invioláveis.
+              Códigos têm validade e limite de tentativas. As sessões podem ser encerradas no painel de dispositivos conectados. O reconhecimento do IP não substitui sua senha.
             </p>
           </div>
           <div class="modal-footer border-0 pt-0 px-4 pb-4">
@@ -197,12 +191,13 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { api, getOrCreateDeviceToken } from '@/services/api'
+import { clearStaffAccessToken, saveStaffSession } from '@/services/staffAuth'
 import LoginVerificationModal from '@/components/LoginVerificationModal.vue'
 
 const router = useRouter()
 const route = useRoute()
 
-const isDarkMode = ref(localStorage.getItem('easysloting_theme') === 'dark')
+const isDarkMode = ref(localStorage.getItem('easyslotting_theme') === 'dark')
 const loading = ref(false)
 const errorMsg = ref('')
 const successMsg = ref('')
@@ -210,10 +205,11 @@ const successMsg = ref('')
 const showPassword = ref(false)
 const showPrivacyModal = ref(false)
 
-// ─── Verification State (Novo Dispositivo / IP - Estilo Discord) ──────────────
+// ─── Verificação por e-mail: primeiro acesso ou IP desconhecido ──────────────
 const showVerificationModal = ref(false)
 const maskedEmail = ref('')
 const verificationError = ref('')
+const resendingOtp = ref(false)
 
 // ─── Rate limiting frontend ──────────────────────────────────────────────────
 const MAX_ATTEMPTS = 5
@@ -243,8 +239,7 @@ const startLockoutCountdown = () => {
 
 const form = reactive({
   email: '',
-  password: '',
-  remember: false
+  password: ''
 })
 
 watch(
@@ -252,7 +247,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
   },
   { immediate: true }
 )
@@ -266,18 +261,11 @@ const clearSession = () => {
     localStorage.removeItem(key)
     sessionStorage.removeItem(key)
   })
-}
-
-const saveSession = (accessToken, client, uid, user) => {
-  const storage = form.remember ? localStorage : sessionStorage
-  storage.setItem('access-token', accessToken)
-  storage.setItem('client', client)
-  storage.setItem('uid', uid)
-  storage.setItem('user', JSON.stringify(user))
-  storage.setItem('role', user?.role || '')
+  clearStaffAccessToken()
 }
 
 const handleLogin = async (otpCode = null) => {
+  if (loading.value || resendingOtp.value) return
   errorMsg.value = ''
   successMsg.value = ''
   verificationError.value = ''
@@ -344,7 +332,7 @@ const handleLogin = async (otpCode = null) => {
     failedAttempts.value = 0
     showVerificationModal.value = false
     clearSession()
-    saveSession(accessToken, client, uid, user)
+    saveStaffSession(accessToken, client, uid, user, response.data?.staff_csrf_token)
 
     successMsg.value = 'Login realizado com sucesso! Redirecionando...'
 
@@ -378,6 +366,11 @@ const handleLogin = async (otpCode = null) => {
     setTimeout(() => router.push(redirectTo), 600)
 
   } catch (err) {
+    if (['OWNER_SESSION_LIMIT_REACHED', 'STAFF_SESSION_LIMIT_REACHED'].includes(err.response?.data?.code)) {
+      showVerificationModal.value = false
+      errorMsg.value = err.response.data.errors?.[0] || 'Limite de aparelhos conectados atingido. Encerre uma sessão em outro aparelho para entrar.'
+      return
+    }
     failedAttempts.value++
 
     if (failedAttempts.value >= MAX_ATTEMPTS) {
@@ -414,14 +407,19 @@ const handleVerifyOtp = async (code) => {
 }
 
 const handleResendOtp = async () => {
+  if (loading.value || resendingOtp.value) return
   verificationError.value = ''
+  resendingOtp.value = true
   try {
     await api.post('/devise_users/sign_in', {
       email: form.email.trim().toLowerCase(),
-      password: form.password
+      password: form.password,
+      device_token: getOrCreateDeviceToken()
     })
   } catch (err) {
-    console.error('[Resend OTP] Error:', err)
+    verificationError.value = err.response?.data?.errors?.[0] || 'Não foi possível reenviar o código.'
+  } finally {
+    resendingOtp.value = false
   }
 }
 </script>

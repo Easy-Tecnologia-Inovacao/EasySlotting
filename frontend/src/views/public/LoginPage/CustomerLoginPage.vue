@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="login-page bg-body text-body min-vh-100 d-flex flex-column" :data-bs-theme="isDarkMode ? 'dark' : 'light'">
 
     <!-- Theme toggle -->
@@ -75,17 +75,9 @@
             </div>
           </div>
 
-          <div class="mb-4">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="clienteRemember" v-model="form.remember">
-              <label class="form-check-label small text-body fw-semibold" for="clienteRemember">
-                Lembrar este dispositivo
-              </label>
-              <div class="text-muted extra-small mt-1">
-                Reconhece seu navegador com segurança mesmo se o IP do seu modem mudar.
-              </div>
-            </div>
-          </div>
+          <p class="text-muted extra-small mb-4">
+            No primeiro acesso ou em um IP novo, enviaremos um código ao seu e-mail.
+          </p>
 
           <button
             type="submit"
@@ -141,6 +133,8 @@
       :show="showVerificationModal"
       :email-masked="maskedEmail"
       :error-msg="verificationError"
+      :loading="loading"
+      :resending="resendingOtp"
       @verify="handleVerifyOtp"
       @cancel="showVerificationModal = false"
       @resend="handleResendOtp"
@@ -160,17 +154,18 @@ const router = useRouter()
 const route  = useRoute()
 const store  = useThemeStore()
 
-const isDarkMode   = ref(localStorage.getItem('easysloting_theme') === 'dark')
+const isDarkMode   = ref(localStorage.getItem('easyslotting_theme') === 'dark')
 const loading      = ref(false)
 const errorMsg     = ref('')
 const successMsg   = ref('')
 
 const showPassword = ref(false)
 
-// ─── Verification State (Novo Dispositivo / IP - Estilo Discord) ──────────────
+// ─── Verificação por e-mail: primeiro acesso ou IP desconhecido ──────────────
 const showVerificationModal = ref(false)
 const maskedEmail = ref('')
 const verificationError = ref('')
+const resendingOtp = ref(false)
 
 // ─── Rate limiting frontend ───────────────────────────────────────────────────
 const MAX_ATTEMPTS    = 5
@@ -198,8 +193,7 @@ const startLockoutCountdown = () => {
 
 const form = reactive({
   email:    '',
-  password: '',
-  remember: false
+  password: ''
 })
 
 // Slug vem da rota /empresa/:slug/login
@@ -210,7 +204,7 @@ const currentSlug = computed(() =>
   ''
 )
 
-const establishmentName = computed(() => store.salonConfig?.nome || 'EasySloting')
+const establishmentName = computed(() => store.salonConfig?.nome || 'EasySlotting')
 
 const backRoute = computed(() =>
   currentSlug.value ? `/empresa/${currentSlug.value}` : '/'
@@ -244,7 +238,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
     store.isDarkMode = newVal
   },
   { immediate: true }
@@ -274,6 +268,7 @@ onMounted(async () => {
 })
 
 const handleLogin = async (otpCode?: string | null) => {
+  if (loading.value || resendingOtp.value) return
   errorMsg.value   = ''
   successMsg.value = ''
   verificationError.value = ''
@@ -307,7 +302,7 @@ const handleLogin = async (otpCode?: string | null) => {
 
     const response = await api.post(`/customer_auth/${currentSlug.value}/sign_in`, payload)
 
-    // 🔒 Verificação de Novo Dispositivo / IP (Estilo Discord)
+    // O desafio pendente não cria uma sessão local.
     if (response.data?.requires_verification) {
       maskedEmail.value = response.data.email_masked || form.email
       showVerificationModal.value = true
@@ -318,7 +313,7 @@ const handleLogin = async (otpCode?: string | null) => {
 
     // Limpa qualquer sessão antiga antes de salvar a nova
     clearCustomerSession()
-    saveCustomerSession(access_token, customer, currentSlug.value, form.remember, expires_in, csrf_token)
+    saveCustomerSession(access_token, customer, currentSlug.value, false, expires_in, csrf_token)
 
     // Zera tentativas em sucesso
     failedAttempts.value = 0
@@ -377,7 +372,9 @@ const handleVerifyOtp = async (code: string) => {
 }
 
 const handleResendOtp = async () => {
+  if (loading.value || resendingOtp.value) return
   verificationError.value = ''
+  resendingOtp.value = true
   try {
     await api.post(`/customer_auth/${currentSlug.value}/sign_in`, {
       email: form.email.trim().toLowerCase(),
@@ -386,6 +383,8 @@ const handleResendOtp = async () => {
     })
   } catch (err: any) {
     verificationError.value = err.response?.data?.error || 'Erro ao reenviar código de verificação.'
+  } finally {
+    resendingOtp.value = false
   }
 }
 </script>

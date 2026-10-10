@@ -1,11 +1,11 @@
-﻿<template>
+<template>
   <footer class="site-footer mt-5 py-5" style="background: var(--glass-bg); backdrop-filter: blur(15px); border-top: 1px solid rgba(0,0,0,0.05);">
     <div class="container">
       <div class="row g-4">
         <!-- Info do estabelecimento -->
         <div class="col-lg-4 col-md-6">
           <router-link :to="`/empresa/${slug}`" class="fw-bold fs-4 text-decoration-none d-block mb-2" style="color: var(--button-bg);">
-            {{ establishmentName || 'EasySloting' }}
+            {{ establishmentName || 'EasySlotting' }}
           </router-link>
           <p class="mt-3 small opacity-75 dynamic-text" style="max-width: 300px;">
             {{ establishmentDescription || '' }}
@@ -69,7 +69,7 @@
       <hr class="my-4 opacity-10">
 
       <p class="text-center small mb-0 dynamic-text" style="opacity: 0.7;">
-        © {{ new Date().getFullYear() }} {{ establishmentName || 'EasySloting' }} - Todos os direitos reservados.
+        © {{ new Date().getFullYear() }} {{ establishmentName || 'EasySlotting' }} - Todos os direitos reservados.
       </p>
     </div>
   </footer>

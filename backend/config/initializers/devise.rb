@@ -1,6 +1,7 @@
 ﻿# frozen_string_literal: true
 
 Devise.setup do |config|
+  config.paranoid = true
   config.mailer_sender = ENV.fetch('EMAIL_FROM', 'noreply@easysloting.com.br')
 
   require 'devise/orm/active_record'

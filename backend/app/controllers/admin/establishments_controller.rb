@@ -1,3 +1,5 @@
+require 'vips'
+
 class Admin::EstablishmentsController < ApplicationController
   before_action :authenticate_user!
   before_action :set_establishment
@@ -355,9 +357,16 @@ class Admin::EstablishmentsController < ApplicationController
 
     file_path = upload_dir.join(filename)
 
-    File.open(file_path, 'wb') do |f|
-      f.write(file.read)
-    end
+    # Decodifica e reencoda a imagem antes de torná-la pública. Isso impede que
+    # um arquivo poliglota mantenha conteúdo arbitrário e limita imagens que
+    # poderiam consumir memória excessiva ao serem processadas.
+    data = file.read
+    image = Vips::Image.new_from_buffer(data, '', access: :sequential)
+    pixel_count = image.width.to_i * image.height.to_i
+    raise StandardError, 'Dimensões da imagem excedem o limite permitido.' if image.width > 5000 || image.height > 5000 || pixel_count > 25_000_000
+
+    options = detected_type == 'image/png' ? { compression: 6, strip: true } : { Q: 85, strip: true }
+    image.write_to_file(file_path.to_s, **options)
 
     "/uploads/establishments/#{filename}"
   end
