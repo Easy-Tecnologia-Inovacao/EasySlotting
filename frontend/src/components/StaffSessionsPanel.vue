@@ -18,7 +18,7 @@
 
       <div v-if="errorMessage" class="alert alert-danger" role="alert">{{ errorMessage }}</div>
       <div v-if="successMessage" class="alert alert-success" role="status">{{ successMessage }}</div>
-      <div class="card sessions-card shadow-sm rounded-4 mb-4">
+      <div v-if="hasLoaded" class="card sessions-card shadow-sm rounded-4 mb-4">
         <div class="card-body p-4">
           <p class="fw-semibold mb-2">{{ sessions.length }} de {{ limit }} sessões disponíveis em uso</p>
           <p class="text-body-secondary mb-0">O limite é definido para o seu perfil e plano. Entrar novamente no mesmo navegador substitui o acesso anterior. Fechar uma aba não encerra a sessão no servidor.</p>
@@ -26,7 +26,8 @@
       </div>
 
       <p v-if="loading" role="status">Carregando dispositivos…</p>
-      <div v-else class="row g-3">
+      <button v-if="!loading && !hasLoaded && errorMessage" class="btn btn-outline-primary mb-4" :disabled="busy" @click="loadSessions">Tentar novamente</button>
+      <div v-if="hasLoaded && !loading" class="row g-3">
         <div v-for="session in sessions" :key="session.client_id" class="col-12 col-lg-6">
           <div class="card sessions-card h-100 shadow-sm rounded-4">
             <div class="card-body p-4">
@@ -49,14 +50,14 @@
         <p v-if="!sessions.length" class="text-body-secondary">Nenhum acesso disponível para exibir.</p>
       </div>
 
-      <button v-if="sessions.length > 1" class="btn btn-outline-danger mt-4" :disabled="busy || loading" @click="revokeOthers">
+      <button v-if="hasLoaded && sessions.length > 1" class="btn btn-outline-danger mt-4" :disabled="busy || loading" @click="revokeOthers">
         Encerrar todos os outros acessos
       </button>
     </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, logoutStaff } from '@/services/api'
 import { getStaffSessionVersion } from '@/services/staffAuth'
@@ -74,61 +75,113 @@ type Session = {
 
 const router = useRouter()
 const sessions = ref<Session[]>([])
-const limit = ref(1)
+const limit = ref<number | null>(null)
+const hasLoaded = ref(false)
 const loading = ref(false)
 const busy = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const version = getStaffSessionVersion()
-const isCurrentAccount = () => version === getStaffSessionVersion()
+let mounted = true
+let generation = 0
+const isCurrentAccount = () => mounted && version === getStaffSessionVersion()
+
+function clearInventory() {
+  hasLoaded.value = false
+  sessions.value = []
+  limit.value = null
+}
+
+function parseInventory(data: unknown): { sessions: Session[]; limit: number } {
+  if (!data || typeof data !== 'object') throw new Error('Resposta inválida')
+  const payload = data as Record<string, unknown>
+  const count = payload.active_count
+  const quota = payload.limit
+  if (typeof quota !== 'number' || !Number.isInteger(quota) || quota < 1 || quota > 5 ||
+      !Array.isArray(payload.sessions) || count !== payload.sessions.length || payload.sessions.length > quota) {
+    throw new Error('Resposta inválida')
+  }
+  const ids = new Set<string>()
+  const validDate = (value: unknown) => typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value))
+  const rows = payload.sessions.map((value: unknown) => {
+    if (!value || typeof value !== 'object') throw new Error('Resposta inválida')
+    const item = value as Record<string, unknown>
+    if (typeof item.client_id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(item.client_id) || ids.has(item.client_id) ||
+        typeof item.is_current !== 'boolean' || typeof item.device !== 'string' || item.device.length > 200 ||
+        !(item.ip === null || (typeof item.ip === 'string' && item.ip.length <= 45)) ||
+        !(item.last_seen_at === null || validDate(item.last_seen_at)) || !validDate(item.expires_at)) {
+      throw new Error('Resposta inválida')
+    }
+    ids.add(item.client_id)
+    return { client_id: item.client_id, is_current: item.is_current, device: item.device,
+      ip: item.ip as string | null, last_seen_at: item.last_seen_at as string | null, expires_at: item.expires_at as string }
+  })
+  if (rows.length && rows.filter(row => row.is_current).length !== 1) throw new Error('Resposta inválida')
+  return { sessions: rows, limit: quota }
+}
 
 const formatDate = (value: string | null) => value ? new Date(value).toLocaleString('pt-BR') : 'Não disponível'
 
 async function loadSessions() {
-  if (!isCurrentAccount()) return
+  if (loading.value || busy.value || !isCurrentAccount()) return
+  successMessage.value = ''
+  await fetchInventory()
+}
+
+// Chamado pelas mutações somente depois da resposta do DELETE. Nenhum GET
+// anterior pode estar em voo: os handlers serializam carga e escrita.
+async function fetchInventory() {
+  const requestGeneration = ++generation
   loading.value = true
+  clearInventory()
   errorMessage.value = ''
   try {
     const { data } = await api.get('/me/sessions')
-    if (!isCurrentAccount()) return
-    sessions.value = data.sessions
-    limit.value = data.limit ?? 1
+    if (!isCurrentAccount() || requestGeneration !== generation) return
+    const inventory = parseInventory(data)
+    sessions.value = inventory.sessions
+    limit.value = inventory.limit
+    hasLoaded.value = true
   } catch {
-    if (isCurrentAccount()) errorMessage.value = 'Não foi possível carregar os acessos. Tente novamente.'
+    if (isCurrentAccount() && requestGeneration === generation) errorMessage.value = 'Não foi possível carregar os acessos. Tente novamente.'
   } finally {
-    loading.value = false
+    if (isCurrentAccount() && requestGeneration === generation) loading.value = false
   }
 }
 
 async function revokeSession(session: Session) {
-  if (busy.value || !isCurrentAccount()) return
-  if (!window.confirm(session.is_current ? 'Sair da conta neste aparelho?' : 'Encerrar este acesso? O aparelho precisará entrar novamente.')) return
+  if (busy.value || loading.value || !hasLoaded.value || !isCurrentAccount()) return
+  const target = sessions.value.find(item => item.client_id === session.client_id)
+  if (!target || !window.confirm(target.is_current ? 'Sair da conta neste aparelho?' : 'Encerrar este acesso? O aparelho precisará entrar novamente.')) return
   busy.value = true
   errorMessage.value = ''
   successMessage.value = ''
   try {
-    if (session.is_current) {
+    if (target.is_current) {
       try {
         await logoutStaff()
       } finally {
         // O helper limpa a interface mesmo se a revogação remota falhar.
-        if (getStaffSessionVersion() === version + 1) await router.replace('/sistema/login')
+        if (mounted && getStaffSessionVersion() === version + 1) await router.replace('/sistema/login')
       }
       return
     }
-    await api.delete(`/me/sessions/${encodeURIComponent(session.client_id)}`)
+    await api.delete(`/me/sessions/${encodeURIComponent(target.client_id)}`)
     if (!isCurrentAccount()) return
     successMessage.value = 'Acesso encerrado. Uma vaga está disponível.'
-    await loadSessions()
+    await fetchInventory()
   } catch {
-    if (isCurrentAccount()) errorMessage.value = 'Não foi possível encerrar o acesso. Atualize a lista e tente novamente.'
+    if (isCurrentAccount()) {
+      clearInventory()
+      errorMessage.value = 'Não foi possível confirmar o encerramento. Atualize a lista e tente novamente.'
+    }
   } finally {
     busy.value = false
   }
 }
 
 async function revokeOthers() {
-  if (busy.value || !isCurrentAccount() || !window.confirm('Encerrar todos os outros acessos da sua conta?')) return
+  if (busy.value || loading.value || !hasLoaded.value || sessions.value.length < 2 || !isCurrentAccount() || !window.confirm('Encerrar todos os outros acessos da sua conta?')) return
   busy.value = true
   errorMessage.value = ''
   successMessage.value = ''
@@ -136,15 +189,19 @@ async function revokeOthers() {
     await api.delete('/me/sessions')
     if (!isCurrentAccount()) return
     successMessage.value = 'Os outros acessos foram encerrados.'
-    await loadSessions()
+    await fetchInventory()
   } catch {
-    if (isCurrentAccount()) errorMessage.value = 'Não foi possível encerrar os acessos. Tente novamente.'
+    if (isCurrentAccount()) {
+      clearInventory()
+      errorMessage.value = 'Não foi possível confirmar o encerramento dos acessos. Atualize a lista e tente novamente.'
+    }
   } finally {
     busy.value = false
   }
 }
 
 onMounted(loadSessions)
+onBeforeUnmount(() => { mounted = false; generation++ })
 </script>
 
 <style scoped>

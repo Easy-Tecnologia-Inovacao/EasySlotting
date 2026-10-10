@@ -183,6 +183,27 @@ com HTTPS e cookies reais. Não houve deploy ou execução na VM nesta etapa.
 Reverter somente o código devolve o comportamento anterior; os hashes extras são
 inertes sem o endpoint e não exigem rollback de schema.
 
+## Gestão dos dispositivos conectados
+
+As três ações de `/api/me/sessions` são autenticadas e limitadas pela conta
+validada no servidor, sem confiar em UID fornecido antes da autenticação.
+O limite de account é 30 requisições/minuto, compartilhado entre as ações de
+Account::UsersController; 429 inclui Retry-After de 60 segundos. Produção
+precisa manter cache compartilhado entre processos para agregar a contagem.
+
+StaffSessionsPanel serializa carga e revogação, valida a resposta e oculta
+inventário desconhecido ou desatualizado até concluir uma nova carga. Falhar
+ao confirmar um DELETE exige atualização antes de outra ação. Encerrar o
+acesso atual continua usando logoutStaff; falha de rede limpa a interface,
+mas não garante revogação remota.
+
+A API retorna apenas os campos usados pela tela. Eventos novos de revogação
+registram revoked_client_digest (SHA256 com prefixo staff-session:) em vez do
+client_id integral em details; isso não apaga logs antigos nem altera logs de
+URL do proxy. Não há migration. Backend deve reiniciar após atualizar o
+initializer de rate limit. Veja a [revisão de dispositivos](super-admin-devices-review.md)
+para regras, testes e limitações operacionais.
+
 Referências: [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
 e [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html).
 Configuração do proxy: [Vite server.proxy](https://vite.dev/config/server-options#server-proxy).

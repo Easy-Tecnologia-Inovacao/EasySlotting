@@ -95,12 +95,8 @@ class Rack::Attack
     end
   end
 
-  # 6c. Throttle por user para endpoints de account
-  throttle('account/user', limit: 30, period: 1.minute) do |req|
-    if req.path.start_with?('/api/me/') && req.env['HTTP_UID']
-      req.env['HTTP_UID']
-    end
-  end
+  # Account::UsersController aplica a quota por ID após authenticate_user!.
+  # Tráfego não autenticado continua sujeito ao throttle geral por IP.
 
   # 7. Proteção para modificações de Serviços e Pacotes (POST, PUT, DELETE)
   # Limita escritas a 15 por minuto por IP para evitar cadastros automatizados massivos

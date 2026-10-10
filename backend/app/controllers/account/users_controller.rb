@@ -1,5 +1,11 @@
 class Account::UsersController < ApplicationController
   before_action :authenticate_user!
+  # O UID do header ainda não autenticado não pode consumir a quota de terceiros.
+  rate_limit to: 30, within: 1.minute, by: -> { current_user.id }, name: 'account',
+    with: -> {
+      response.headers['Retry-After'] = '60'
+      render json: { error: 'Muitas solicitações. Aguarde um minuto e tente novamente.' }, status: :too_many_requests
+    }
 
   # GET /api/me/export
   # LGPD Art. 18-V — Direito à portabilidade de dados
@@ -263,19 +269,20 @@ class Account::UsersController < ApplicationController
         is_current: client_id == current_client,
         device: data['name'] || 'Dispositivo Desconhecido',
         ip: data['ip'],
-        user_agent: data['ua'],
         last_seen_at: data['last_seen_at'] ? Time.at(data['last_seen_at']).iso8601 : nil,
-        created_at: data['issued_at'] ? Time.at(data['issued_at']).iso8601 : nil,
         expires_at: Time.at(data['expiry'].to_i).iso8601
       }
     end.sort_by { |s| s[:is_current] ? 0 : 1 }
 
-    render json: { sessions: session_list, limit: policy&.limit, active_count: session_list.size }, status: :ok
+    render json: { sessions: session_list, limit: policy.limit, active_count: session_list.size }, status: :ok
   end
 
   # DELETE /api/me/sessions/:client_id
   def destroy_session
     client_id_to_remove = params[:client_id]
+    unless client_id_to_remove.is_a?(String) && client_id_to_remove.match?(/\A[a-zA-Z0-9_-]{1,128}\z/)
+      return render json: { error: 'Sessão não encontrada.' }, status: :not_found
+    end
     removed = current_user.with_lock do
       tokens = (current_user.tokens || {}).dup
       if tokens.key?(client_id_to_remove)
@@ -292,7 +299,7 @@ class Account::UsersController < ApplicationController
         user: current_user,
         ip: request.remote_ip,
         user_agent: request.user_agent,
-        details: { revoked_client_id: client_id_to_remove }
+        details: { revoked_client_digest: Digest::SHA256.hexdigest("staff-session:#{client_id_to_remove}") }
       )
 
       render json: { message: 'Sessão encerrada com sucesso.' }, status: :ok
