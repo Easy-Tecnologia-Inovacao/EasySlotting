@@ -1,0 +1,19 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # O runner fica dentro da VM, pois a staging usa um IP privado da rede local.
+    runs-on: [self-hosted, linux, staging]
+    timeout-minutes: 30
+    steps:
+      - name: Atualizar staging
+        run: bash "$HOME/EasySlotting/scripts/deploy-staging.sh"

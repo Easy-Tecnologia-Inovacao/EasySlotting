@@ -53,3 +53,7 @@ coverage/
 
 # Public CA certificate exported for local staging trust.
 /staging-root.crt
+
+# Skills e regras locais do Codex, específicas deste projeto.
+/.codex/local-skills/
+/.project-skills/

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AdminLayout>
     <section class="page-shell">
       <div class="page-content">
@@ -41,7 +41,7 @@
           <div class="small">
             <strong class="d-block banner-title mb-1">Módulo de Fechamento Operacional:</strong>
             <span class="banner-text">
-              O EasySloting é uma ferramenta de <strong>cálculo e registro documental</strong> de comissões brutas. O sistema <strong>não realiza pagamentos, transferências bancárias ou PIX</strong>, e não calcula encargos trabalhistas ou tributos.
+              O EasySlotting é uma ferramenta de <strong>cálculo e registro documental</strong> de comissões brutas. O sistema <strong>não realiza pagamentos, transferências bancárias ou PIX</strong>, e não calcula encargos trabalhistas ou tributos.
             </span>
           </div>
         </div>
@@ -350,7 +350,7 @@
         <div class="mt-4 pt-3 border-top" style="border-color: var(--card-border) !important">
           <p class="small text-muted mb-0" style="opacity: 0.75">
             <i class="bi bi-info-circle me-1"></i>
-            <strong>Aviso Legal:</strong> Os valores apresentados correspondem aos valores brutos calculados pelo sistema com base nos serviços registrados e nas regras de comissão configuradas. O EasySloting não realiza pagamentos nem determina tributos, retenções ou encargos trabalhistas/fiscais aplicáveis.
+            <strong>Aviso Legal:</strong> Os valores apresentados correspondem aos valores brutos calculados pelo sistema com base nos serviços registrados e nas regras de comissão configuradas. O EasySlotting não realiza pagamentos nem determina tributos, retenções ou encargos trabalhistas/fiscais aplicáveis.
           </p>
         </div>
 
@@ -488,7 +488,7 @@
             <!-- Disclaimer de responsabilidade institucional -->
             <div class="p-3 rounded-3 bg-warning bg-opacity-10 border border-warning-subtle small mb-3">
               <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
-              <strong>Atenção:</strong> Este fechamento registra documentalmente o valor bruto calculado com base nos atendimentos e regras de comissão do período. O EasySloting <strong>não realiza o pagamento</strong> nem calcula encargos, impostos ou deduções trabalhistas.
+              <strong>Atenção:</strong> Este fechamento registra documentalmente o valor bruto calculado com base nos atendimentos e regras de comissão do período. O EasySlotting <strong>não realiza o pagamento</strong> nem calcula encargos, impostos ou deduções trabalhistas.
             </div>
 
             <div class="mb-2">

@@ -178,6 +178,11 @@
                   </div>
 
                   <div class="feature-item">
+                    <i class="bi bi-laptop"></i>
+                    <span>Até {{ plan.max_owner_sessions ?? 1 }} {{ (plan.max_owner_sessions ?? 1) === 1 ? 'aparelho conectado' : 'aparelhos conectados' }} por conta do proprietário ou funcionário</span>
+                  </div>
+
+                  <div class="feature-item">
                     <i class="bi bi-check2-circle"></i>
                     <span>Site público do estabelecimento</span>
                   </div>

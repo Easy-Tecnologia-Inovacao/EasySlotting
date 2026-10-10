@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AdminLayout>
     <div v-if="loading" class="text-center py-5">
       Carregando configurações...
@@ -816,10 +816,10 @@ const perfilVazio = () => ({
   legal_pages: {
     privacy_policy: `<h2>Política de Privacidade</h2>
 
-<p>A EasySloting, em conjunto com os estabelecimentos parceiros, compromete-se a proteger a privacidade e os dados pessoais de seus clientes e visitantes, em conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018).</p>
+<p>A EasySlotting, em conjunto com os estabelecimentos parceiros, compromete-se a proteger a privacidade e os dados pessoais de seus clientes e visitantes, em conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018).</p>
 
 <h2>1. Controlador dos Dados</h2>
-<p>O controlador dos dados pessoais é o estabelecimento parceiro onde você realizou seu cadastro. A EasySloting atua como operadora de dados, processando informações em nome do estabelecimento.</p>
+<p>O controlador dos dados pessoais é o estabelecimento parceiro onde você realizou seu cadastro. A EasySlotting atua como operadora de dados, processando informações em nome do estabelecimento.</p>
 
 <h2>2. Dados Coletados</h2>
 <p>Coletamos as seguintes informações durante o uso dos nossos serviços:</p>
@@ -855,7 +855,7 @@ const perfilVazio = () => ({
   <li>Necessário para cumprir obrigação legal ou regulatória</li>
   <li>Autorizado por você de forma expressa</li>
   <li>Necessário para a prestação do serviço contratado (ex: profissional do estabelecimento)</li>
-  <li>Proteção dos direitos do estabelecimento ou da EasySloting</li>
+  <li>Proteção dos direitos do estabelecimento ou da EasySlotting</li>
 </ul>
 
 <h2>6. Segurança dos Dados</h2>
@@ -900,15 +900,15 @@ const perfilVazio = () => ({
 <p>Para exercer seus direitos ou esclarecer dúvidas sobre esta política, entre em contato com o estabelecimento diretamente pelo painel do cliente ou pelos canais de contato disponíveis no site.</p>
 
 <p><em>Última atualização: 21/06/2026</em></p>
-<p><em>Política gerenciada pela plataforma EasySloting em conformidade com a LGPD.</em></p>`,
+<p><em>Política gerenciada pela plataforma EasySlotting em conformidade com a LGPD.</em></p>`,
 
     terms_of_use: `<h2>Termos de Uso</h2>
 
-<p>Ao utilizar o site e os serviços disponibilizados pela EasySloting em parceria com o estabelecimento, você concorda com os seguintes Termos de Uso.</p>
+<p>Ao utilizar o site e os serviços disponibilizados pela EasySlotting em parceria com o estabelecimento, você concorda com os seguintes Termos de Uso.</p>
 
 <h2>1. Definições</h2>
 <ul>
-  <li><strong>Plataforma:</strong> Sistema EasySloting de agendamento online</li>
+  <li><strong>Plataforma:</strong> Sistema EasySlotting de agendamento online</li>
   <li><strong>Estabelecimento:</strong> Empresa parceira que utiliza a plataforma</li>
   <li><strong>Cliente:</strong> Usuário que realiza cadastro e agendamentos</li>
   <li><strong>Serviço:</strong> Atendimento oferecido pelo estabelecimento</li>
@@ -950,12 +950,12 @@ const perfilVazio = () => ({
 <ul>
   <li>Os preços são definidos pelo estabelecimento e podem ser alterados sem aviso prévio</li>
   <li>O pagamento é realizado diretamente no estabelecimento na data do atendimento</li>
-  <li>A EasySloting não processa pagamentos online nesta versão</li>
+  <li>A EasySlotting não processa pagamentos online nesta versão</li>
 </ul>
 
 <h2>7. Propriedade Intelectual</h2>
 <ul>
-  <li>Todo o conteúdo da plataforma (código, design, textos, logotipos) é de propriedade da EasySloting</li>
+  <li>Todo o conteúdo da plataforma (código, design, textos, logotipos) é de propriedade da EasySlotting</li>
   <li>O conteúdo fornecido pelo estabelecimento (fotos, descrições) é de propriedade do estabelecimento</li>
   <li>É proibida a reprodução, distribuição ou modificação não autorizada</li>
 </ul>
@@ -971,14 +971,14 @@ const perfilVazio = () => ({
 
 <h2>9. Limitação de Responsabilidade</h2>
 <ul>
-  <li>A EasySloting atua como intermediadora de agendamentos</li>
+  <li>A EasySlotting atua como intermediadora de agendamentos</li>
   <li>A qualidade do serviço é responsabilidade do estabelecimento</li>
-  <li>A EasySloting não se responsabiliza por danos diretos ou indiretos decorrentes do uso dos serviços</li>
+  <li>A EasySlotting não se responsabiliza por danos diretos ou indiretos decorrentes do uso dos serviços</li>
   <li>Em caso de disputa, o cliente deve entrar em contato diretamente com o estabelecimento</li>
 </ul>
 
 <h2>10. Suspensão ou Cancelamento de Conta</h2>
-<p>A EasySloting ou o estabelecimento podem suspender ou cancelar contas que:</p>
+<p>A EasySlotting ou o estabelecimento podem suspender ou cancelar contas que:</p>
 <ul>
   <li>Violem estes Termos de Uso</li>
   <li>Apresentem comportamento fraudulento</li>
@@ -992,14 +992,14 @@ const perfilVazio = () => ({
 <p>Estes termos são regidos pelas leis da República Federativa do Brasil. Fica eleito o foro da comarca de [CIDADE DO ESTABELECIMENTO] para dirimir quaisquer questões.</p>
 
 <h2>13. Canal de Suporte</h2>
-<p>Em caso de dúvidas, entre em contato com o suporte da EasySloting ou diretamente com o estabelecimento pelos canais disponíveis no site.</p>
+<p>Em caso de dúvidas, entre em contato com o suporte da EasySlotting ou diretamente com o estabelecimento pelos canais disponíveis no site.</p>
 
 <p><em>Última atualização: 21/06/2026</em></p>
-<p><em>Termos gerenciados pela plataforma EasySloting.</em></p>`,
+<p><em>Termos gerenciados pela plataforma EasySlotting.</em></p>`,
 
     cookie_policy: `<h2>Política de Cookies</h2>
 
-<p>Esta Política de Cookies descreve como a EasySloting utiliza cookies e tecnologias similares quando você acessa e utiliza nossa plataforma de agendamento online.</p>
+<p>Esta Política de Cookies descreve como a EasySlotting utiliza cookies e tecnologias similares quando você acessa e utiliza nossa plataforma de agendamento online.</p>
 
 <h2>1. O que são Cookies?</h2>
 <p>Cookies são pequenos arquivos de texto armazenados no seu dispositivo (computador, tablet ou smartphone) quando você visita um site. Eles permitem que o site reconheça sua visita e melhore sua experiência de navegação.</p>
@@ -1020,7 +1020,7 @@ const perfilVazio = () => ({
 <p><strong>Permitem que a plataforma lembre suas preferências de personalização.</strong></p>
 <table>
   <tr><th>Cookie</th><th>Finalidade</th><th>Duração</th></tr>
-  <tr><td>easysloting_theme</td><td>Armazena sua preferência de tema visual (claro/escuro)</td><td>Indefinida</td></tr>
+  <tr><td>easyslotting_theme</td><td>Armazena sua preferência de tema visual (claro/escuro)</td><td>Indefinida</td></tr>
   <tr><td>site-slug</td><td>Identifica o estabelecimento acessado</td><td>Sessão</td></tr>
 </table>
 
@@ -1033,7 +1033,7 @@ const perfilVazio = () => ({
 </table>
 
 <h2>3. Cookies de Terceiros</h2>
-<p>A EasySloting não utiliza cookies de terceiros para fins de rastreamento ou publicidade. Todos os cookies são第一party (primeira parte) e estão sob nosso controle direto.</p>
+<p>A EasySlotting não utiliza cookies de terceiros para fins de rastreamento ou publicidade. Todos os cookies são第一party (primeira parte) e estão sob nosso controle direto.</p>
 
 <h2>4. Segurança dos Cookies</h2>
 <ul>
@@ -1061,10 +1061,10 @@ const perfilVazio = () => ({
 <p>Esta Política de Cookies pode ser atualizada periodicamente. Recomendamos que você consulte esta página regularmente para se manter informado.</p>
 
 <h2>8. Canal de Comunicação</h2>
-<p>Em caso de dúvidas sobre esta política, entre em contato com o estabelecimento ou com o suporte da EasySloting.</p>
+<p>Em caso de dúvidas sobre esta política, entre em contato com o estabelecimento ou com o suporte da EasySlotting.</p>
 
 <p><em>Última atualização: 21/06/2026</em></p>
-<p><em>Política gerenciada pela plataforma EasySloting em conformidade com a LGPD.</em></p>`,
+<p><em>Política gerenciada pela plataforma EasySlotting em conformidade com a LGPD.</em></p>`,
 
     about_us: `<h2>Quem Somos</h2>
 

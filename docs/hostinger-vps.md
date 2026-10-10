@@ -99,6 +99,10 @@ Não importe o certificado interno usado na staging na produção.
 
 ## 4. Dar acesso da VPS ao GitHub e clonar main
 
+O repositório de produção fica na conta `easytecnologiainovacao`:
+`git@github.com:easytecnologiainovacao/EasySlotting.git`. A chave de deploy deve
+ser cadastrada nesse repositório, sem permissão de escrita.
+
 Conectado como deploy, crie uma chave exclusiva para leitura do repositório:
 
 ~~~bash
@@ -113,7 +117,7 @@ Confira a impressão digital oficial do GitHub antes de aceitar a conexão SSH.
 A chave privada permanece na VPS; nunca coloque token na URL do clone.
 
 ~~~bash
-git clone --branch main --single-branch git@github.com:EasySlotting/EasySlotting.git
+git clone --branch main --single-branch git@github.com:easytecnologiainovacao/EasySlotting.git
 cd ~/EasySlotting
 git status --short --branch
 ~~~

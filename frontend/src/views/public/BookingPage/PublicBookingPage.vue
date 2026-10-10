@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     :data-bs-theme="store.isDarkMode ? 'dark' : 'light'"
     class="bg-body text-body min-vh-100 pb-5 page-offset"
@@ -633,7 +633,7 @@
 
         <hr class="my-4 opacity-10">
         <p class="text-center small mb-0 dynamic-text" style="opacity: 0.7;">
-          © 2026 {{ store.salonConfig.nome }} - Todos os direitos reservados. Feito com EasySloting.
+          © 2026 {{ store.salonConfig.nome }} - Todos os direitos reservados. Feito com EasySlotting.
         </p>
       </div>
     </footer>
@@ -644,7 +644,7 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useThemeStore } from '@/stores/themeStore'
 import { useRouter, useRoute } from 'vue-router'
-import { api } from '@/services/api'
+import { api, logoutCustomer } from '@/services/api'
 import { isCustomerLoggedIn, getCustomerData, clearCustomerSession } from '@/services/customerAuth'
 
 const store = useThemeStore()
@@ -874,7 +874,7 @@ const filteredPackages = computed<ServicePackageItem[]>(() => {
 const logout = async () => {
   try {
     // Invalida o refresh token no backend
-    await api.delete(`/customer_auth/${currentSlug.value}/sign_out`)
+    await logoutCustomer()
   } catch {
     // Ignora erro — limpa local mesmo assim
   }

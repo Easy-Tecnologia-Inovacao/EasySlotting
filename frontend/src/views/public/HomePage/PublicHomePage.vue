@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     v-if="loadingEmpresa"
     class="d-flex justify-content-center align-items-center"
@@ -20,7 +20,7 @@
     <nav class="navbar navbar-expand-lg fixed-top">
       <div class="container d-flex align-items-center">
         <router-link :to="`/empresa/${route.params.slug}`" class="navbar-brand fw-bold fs-3 custom-logo m-0">
-          {{ store.salonConfig?.nome || 'EasySloting' }}
+          {{ store.salonConfig?.nome || 'EasySlotting' }}
         </router-link>
 
         <div class="collapse navbar-collapse" id="navContent">
@@ -97,7 +97,7 @@
     >
       <div class="container text-center hero-content">
         <h1 class="display-3 fw-bold text-white">
-          {{ store.salonConfig?.nome || 'EasySloting' }}
+          {{ store.salonConfig?.nome || 'EasySlotting' }}
         </h1>
       
         <p class="lead fw-semibold text-white mb-4">
@@ -206,7 +206,7 @@
         <div class="row g-4">
           <div class="col-lg-4 col-md-6">
             <router-link :to="`/empresa/${route.params.slug}`" class="fw-bold fs-4 custom-logo text-decoration-none d-block text-wrap text-break mb-2">
-              {{ store.salonConfig?.nome || 'EasySloting' }}
+              {{ store.salonConfig?.nome || 'EasySlotting' }}
             </router-link>
 
             <p class="mt-3 dynamic-text" style="max-width: 300px; opacity: 0.8;">
@@ -340,7 +340,7 @@
         <hr class="my-4 opacity-10">
 
         <p class="text-center small mb-0 dynamic-text" style="opacity: 0.7;">
-          © 2026 {{ store.salonConfig?.nome || 'EasySloting' }} - Todos os direitos reservados. Feito com EasySloting.
+          © 2026 {{ store.salonConfig?.nome || 'EasySlotting' }} - Todos os direitos reservados. Feito com EasySlotting.
         </p>
       </div>
     </footer>
@@ -348,7 +348,7 @@
 </template>
 
 <script setup lang="ts">
-import { api } from '@/services/api'
+import { api, logoutCustomer } from '@/services/api'
 import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { useThemeStore } from '@/stores/themeStore'
 import { useRouter, useRoute } from 'vue-router'
@@ -397,7 +397,7 @@ const goToMyAccount = () => {
 
 const logout = async () => {
   try {
-    await api.delete(`/customer_auth/${currentSlug.value}/sign_out`)
+    await logoutCustomer()
   } catch {
     // Ignora erro — limpa local mesmo assim
   }

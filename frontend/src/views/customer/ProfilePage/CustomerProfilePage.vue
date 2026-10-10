@@ -282,6 +282,7 @@
         </div>
 
         <!-- Seção: Sessões Recentes -->
+        <CustomerSessionsPanel />
         <div class="single-profile-card border-0 shadow-sm rounded-4 p-4 p-lg-5 mt-4">
           <div class="form-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
             <div>
@@ -409,7 +410,7 @@
             <div>
               <h5 class="fw-bold text-danger mb-1"><i class="bi bi-trash me-2"></i>Excluir Conta</h5>
               <p class="dynamic-text opacity-75 mb-0 small">
-                Esta ação é irreversível. Todos os seus dados serão removidos.
+                Esta ação é irreversível. Seu acesso será encerrado e os dados do seu perfil serão anonimizados.
               </p>
             </div>
             <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">
@@ -422,8 +423,9 @@
             <ul class="small mb-0" style="color: #6b7280;">
               <li>Agendamentos futuros serão cancelados</li>
               <li>Pacotes mensais ativos serão cancelados</li>
-              <li>Histórico de atendimentos será removido</li>
-              <li>Seus dados pessoais serão anonimizados</li>
+              <li>Você perderá o acesso ao histórico; registros de atendimento e financeiros serão preservados</li>
+              <li>Nome, e-mail, telefones e foto do seu perfil serão removidos ou substituídos</li>
+              <li>Suas credenciais e dispositivos confiáveis serão invalidados</li>
             </ul>
           </div>
 
@@ -438,13 +440,25 @@
                 class="form-control custom-input"
                 :placeholder="form.email"
                 autocomplete="off"
+                maxlength="254"
               />
             </div>
             <div class="col-md-6">
+              <label for="delete-current-password" class="form-label custom-label text-danger">Senha atual</label>
+              <input
+                id="delete-current-password"
+                v-model="deleteCurrentPassword"
+                type="password"
+                class="form-control custom-input"
+                autocomplete="current-password"
+                maxlength="128"
+              />
+            </div>
+            <div class="col-12">
               <button
                 class="btn btn-danger rounded-pill fw-bold px-4"
                 @click="confirmDeleteAccount"
-                :disabled="deleteConfirmEmail !== form.email || deletingAccount"
+                :disabled="!canDeleteAccount || deletingAccount"
               >
                 <span v-if="deletingAccount" class="spinner-border spinner-border-sm me-2"></span>
                 {{ deletingAccount ? 'Excluindo...' : 'Excluir Minha Conta' }}
@@ -481,8 +495,9 @@
 import { computed, reactive, ref, onMounted, watch } from 'vue'
 import { useThemeStore } from '@/stores/themeStore'
 import CustomerLayout from '@/views/customer/Layout/CustomerLayout.vue'
-import { api } from '@/services/api'
-import { getCustomerData, getCustomerSlug, saveCustomerSession, getCustomerToken, getCustomerCsrfToken, clearCustomerSession } from '@/services/customerAuth'
+import CustomerSessionsPanel from '@/components/CustomerSessionsPanel.vue'
+import { api, deleteCustomerAccount } from '@/services/api'
+import { getCustomerData, getCustomerSlug, updateCustomerData, getCustomerToken, getCustomerCsrfToken, clearCustomerSession } from '@/services/customerAuth'
 
 const store = useThemeStore()
 const message = ref('')
@@ -505,7 +520,7 @@ const passwordForm = ref({
 
 const isPasswordFormValid = computed(() => {
   const p = passwordForm.value.password
-  const obviousWords = ['admin', 'senha', 'password', '123456', 'easysloting', 'agendamento', 'barbearia']
+  const obviousWords = ['admin', 'senha', 'password', '123456', 'easyslotting', 'agendamento', 'barbearia']
   const hasObviousWord = obviousWords.some(w => p.toLowerCase().includes(w))
 
   return (
@@ -538,11 +553,10 @@ const changePassword = async () => {
     message.value = 'Senha alterada com sucesso! Faça login novamente.'
     passwordForm.value = { current_password: '', password: '', password_confirmation: '' }
 
-    // Redireciona para login após 3 segundos
+    const slug = getCustomerSlug() || ''
+    clearCustomerSession()
     setTimeout(() => {
-      clearCustomerSession()
-      const slug = getCustomerSlug() || ''
-      window.location.href = slug ? `/empresa/${slug}/login` : '/sistema/login'
+      window.location.href = slug ? `/empresa/${slug}/login` : '/cliente/login'
     }, 3000)
   } catch (error: any) {
     const serverMsg = error.response?.data?.error || error.response?.data?.errors?.[0] || 'Erro ao alterar senha.'
@@ -571,10 +585,15 @@ const fetchSessions = async () => {
 
 // ─── Exclusão de Conta ──────────────────────────────────────────────
 const deleteConfirmEmail = ref('')
+const deleteCurrentPassword = ref('')
 const deletingAccount = ref(false)
+const canDeleteAccount = computed(() =>
+  deleteConfirmEmail.value.trim().toLowerCase() === form.email.trim().toLowerCase() &&
+  deleteCurrentPassword.value.length > 0
+)
 
 const confirmDeleteAccount = async () => {
-  if (deleteConfirmEmail.value !== form.email) return
+  if (!canDeleteAccount.value || deletingAccount.value) return
 
   if (!window.confirm('Tem certeza absoluta? Esta ação é IRREVERSÍVEL.')) return
 
@@ -583,21 +602,14 @@ const confirmDeleteAccount = async () => {
   message.value = ''
 
   try {
-    await api.delete('/customer/profile', {
-      data: { confirmation: deleteConfirmEmail.value }
-    })
-
-    message.value = 'Conta excluída com sucesso.'
-    setTimeout(() => {
-      clearCustomerSession()
-      const slug = getCustomerSlug() || ''
-      window.location.href = slug ? `/empresa/${slug}` : '/'
-    }, 2000)
+    const destination = await deleteCustomerAccount(deleteConfirmEmail.value, deleteCurrentPassword.value)
+    window.location.assign(destination)
   } catch (error: any) {
     const serverMsg = error.response?.data?.error || 'Erro ao excluir conta.'
     errorMessage.value = serverMsg
     setTimeout(() => (errorMessage.value = ''), 5000)
   } finally {
+    deleteCurrentPassword.value = ''
     deletingAccount.value = false
   }
 }
@@ -752,13 +764,7 @@ function buildImageUrl(path: string) {
 }
 
 const updateStorage = (updatedCustomer: any) => {
-  // Atualiza os dados do customer no storage usando o service correto
-  const accessToken = getCustomerToken()
-  const slug  = getCustomerSlug() || ''
-  if (accessToken) {
-    const isLocal = !!localStorage.getItem('customer-access-token')
-    saveCustomerSession(accessToken, updatedCustomer, slug, isLocal)
-  }
+  updateCustomerData(updatedCustomer)
 }
 
 const loadUserFromAPI = async () => {

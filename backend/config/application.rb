@@ -28,6 +28,8 @@ module Agendamento
     #
     config.time_zone = 'Brasilia'
     config.i18n.default_locale = :'pt-BR'
+    # Jobs de e-mail transportam OTP e links de recuperação; não registrar argumentos.
+    config.active_job.log_arguments = false
     
     # Habilita cookies para API-only (necessário para httpOnly refresh token)
     config.middleware.use ActionDispatch::Cookies

@@ -6,6 +6,7 @@ class EstablishmentMembership < ApplicationRecord
   has_many :commission_closings, foreign_key: :membership_id, dependent: :nullify
 
   before_validation :sanitize_data
+  validate -> { PlanQuotaPolicy.validate(self, :employees) }
 
   validates :role, presence: true
   validates :user_id, uniqueness: { scope: :establishment_id }

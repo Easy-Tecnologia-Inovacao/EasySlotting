@@ -20,9 +20,9 @@
           <div class="icon-circle mb-2">
             <i class="bi bi-shield-lock-fill text-primary" style="font-size: 28px;"></i>
           </div>
-          <h5 class="modal-title fw-800 text-body">Novo Acesso Detectado</h5>
+          <h5 class="modal-title fw-800 text-body">Confirme seu acesso</h5>
           <p class="text-secondary small mb-0 mt-1">
-            Detectamos um acesso de um novo IP ou navegador. Escolha o método para liberar sua entrada:
+            Confirme o código enviado ao seu e-mail para concluir o login.
           </p>
         </div>
 
@@ -50,25 +50,6 @@
                 </span>
               </div>
             </div>
-
-            <!-- Método 2: 2FA Autenticador (Layout Pré-Pronto) -->
-            <div
-              class="method-card disabled p-3 rounded-3 border d-flex align-items-center opacity-75"
-              style="background-color: var(--bs-tertiary-bg); cursor: not-allowed;"
-            >
-              <div class="method-icon me-3 text-secondary">
-                <i class="bi bi-phone-vibrate-fill fs-4"></i>
-              </div>
-              <div class="flex-grow-1">
-                <div class="fw-bold small text-body">Aplicativo Autenticador (2FA)</div>
-                <div class="text-muted extra-small">Google Authenticator / Authy</div>
-              </div>
-              <div class="method-badge">
-                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill extra-small">
-                  Em breve
-                </span>
-              </div>
-            </div>
           </div>
 
           <!-- Formulário de Código de 6 Dígitos -->
@@ -89,6 +70,8 @@
                 class="form-control form-control-lg text-center otp-input fw-bold letter-spacing-lg"
                 placeholder="000000"
                 maxlength="6"
+                inputmode="numeric"
+                pattern="[0-9]{6}"
                 v-model="otpCode"
                 @keyup.enter="submitVerification"
                 autocomplete="one-time-code"
@@ -99,7 +82,7 @@
               <button
                 type="button"
                 class="btn btn-link p-0 text-decoration-none extra-small fw-bold"
-                :disabled="resendCooldown > 0 || resending"
+                :disabled="resendCooldown > 0 || resending || loading"
                 @click="resendCode"
               >
                 <span v-if="resending" class="spinner-border spinner-border-sm me-1"></span>
@@ -123,7 +106,7 @@
           <button
             type="button"
             class="btn btn-primary btn-sm rounded-pill px-4 fw-bold shadow-sm"
-            :disabled="otpCode.length < 6 || loading"
+            :disabled="!/^\d{6}$/.test(otpCode) || loading || resending"
             @click="submitVerification"
           >
             <span v-if="loading" class="spinner-border spinner-border-sm me-1" role="status"></span>
@@ -136,12 +119,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onUnmounted } from 'vue'
 
 const props = defineProps<{
   show: boolean
   emailMasked: string
   errorMsg?: string
+  loading?: boolean
+  resending?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -150,54 +135,55 @@ const emit = defineEmits<{
   (e: 'resend'): void
 }>()
 
-const selectedMethod = ref<'email' | 'totp'>('email')
+const selectedMethod = ref<'email'>('email')
 const otpCode = ref('')
-const loading = ref(false)
-const resending = ref(false)
 const resendCooldown = ref(0)
 const otpInputRef = ref<HTMLInputElement | null>(null)
-let cooldownTimer: any = null
+let cooldownTimer: ReturnType<typeof setInterval> | null = null
+
+const stopCooldown = () => {
+  if (cooldownTimer) clearInterval(cooldownTimer)
+  cooldownTimer = null
+}
+
+const startCooldown = () => {
+  stopCooldown()
+  resendCooldown.value = 60
+  cooldownTimer = setInterval(() => {
+    resendCooldown.value--
+    if (resendCooldown.value <= 0) stopCooldown()
+  }, 1000)
+}
 
 watch(() => props.show, (newVal) => {
   if (newVal) {
     otpCode.value = ''
+    startCooldown()
     nextTick(() => {
       otpInputRef.value?.focus()
     })
-  }
+  } else stopCooldown()
 })
 
 const submitVerification = () => {
-  if (otpCode.value.length === 6) {
-    loading.value = true
+  if (/^\d{6}$/.test(otpCode.value) && !props.loading && !props.resending) {
     emit('verify', otpCode.value.trim())
   }
 }
 
 const handleCancel = () => {
   otpCode.value = ''
-  loading.value = false
+  stopCooldown()
   emit('cancel')
 }
 
 const resendCode = () => {
-  if (resendCooldown.value > 0 || resending.value) return
-  resending.value = true
+  if (resendCooldown.value > 0 || props.resending || props.loading) return
+  startCooldown()
   emit('resend')
-
-  resendCooldown.value = 60
-  if (cooldownTimer) clearInterval(cooldownTimer)
-  cooldownTimer = setInterval(() => {
-    resendCooldown.value--
-    if (resendCooldown.value <= 0) {
-      clearInterval(cooldownTimer)
-    }
-  }, 1000)
-
-  setTimeout(() => {
-    resending.value = false
-  }, 1000)
 }
+
+onUnmounted(stopCooldown)
 </script>
 
 <style scoped>

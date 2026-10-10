@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div :data-bs-theme="store.isDarkMode ? 'dark' : 'light'" class="app-wrapper min-vh-100 d-flex flex-column">
     <nav class="navbar navbar-expand-lg sticky-top shadow-sm py-3 navbar-custom">
       <div class="container-fluid px-lg-5 px-3 d-flex align-items-center">
@@ -13,7 +13,7 @@
         </button>
 
         <router-link class="navbar-brand fw-bold fs-3 text-primary m-0" to="/super-admin/dashboard">
-          <i class="bi bi-shield-lock-fill me-2 fs-4"></i>EasySloting
+          <i class="bi bi-shield-lock-fill me-2 fs-4"></i>EasySlotting
         </router-link>
 
         <div class="ms-auto d-flex align-items-center gap-3">
@@ -107,6 +107,11 @@
 
               <!-- Logs de Segurança -->
               <li class="nav-item">
+                <router-link class="nav-link-sidebar" active-class="active" to="/super-admin/dispositivos" @click="closeSidebarOnMobile">
+                  <i class="bi bi-laptop me-3"></i><span>Dispositivos conectados</span>
+                </router-link>
+              </li>
+              <li class="nav-item">
                 <router-link
                   class="nav-link-sidebar"
                   active-class="active"
@@ -157,7 +162,8 @@
 import { watch, onMounted, ref, computed } from 'vue'
 import { useThemeStore } from '@/stores/themeStore'
 import { useRouter } from 'vue-router'
-import { api } from '@/services/api'
+import { api, logoutStaff } from '@/services/api'
+import { getStaffAccessToken } from '@/services/staffAuth'
 import { Offcanvas } from 'bootstrap'
 
 const store  = useThemeStore()
@@ -191,7 +197,7 @@ const closeSidebarOnMobile = () => {
 // ─── Theme ────────────────────────────────────────────────────────────────────
 onMounted(() => {
   resetOffcanvasState()
-  const savedTheme = localStorage.getItem('easysloting_theme')
+  const savedTheme = localStorage.getItem('easyslotting_theme')
   store.isDarkMode = savedTheme === 'dark'
   document.documentElement.setAttribute('data-bs-theme', store.isDarkMode ? 'dark' : 'light')
 })
@@ -201,7 +207,7 @@ watch(
   (newVal) => {
     const theme = newVal ? 'dark' : 'light'
     document.documentElement.setAttribute('data-bs-theme', theme)
-    localStorage.setItem('easysloting_theme', theme)
+    localStorage.setItem('easyslotting_theme', theme)
   },
   { immediate: true }
 )
@@ -214,32 +220,12 @@ const handleGoToSite = () => {
 }
 
 // ─── Logout ───────────────────────────────────────────────────────────────────
-const clearSession = () => {
-  const keys = [
-    'access-token', 'client', 'uid', 'user', 'establishment-data', 'site-slug',
-    'establishment-permissions', 'salon-config', 'customer-access-token',
-    'customer-data', 'customer-slug', 'customer-token-expires', 'customer-csrf-token'
-  ]
-  keys.forEach((k) => {
-    localStorage.removeItem(k)
-    sessionStorage.removeItem(k)
-  })
-}
-
 const logout = async () => {
-  const headers = {
-    'access-token': localStorage.getItem('access-token') || sessionStorage.getItem('access-token') || '',
-    'client':       localStorage.getItem('client')       || sessionStorage.getItem('client')       || '',
-    'uid':          localStorage.getItem('uid')          || sessionStorage.getItem('uid')          || ''
-  }
-
   try {
-    await api.delete('/devise_users/sign_out', { headers })
-  } catch (error) {
-    // Sessão já inválida — apenas limpa localmente
-    console.warn('Logout remoto falhou (sessão já expirada):', error?.response?.status)
+    await logoutStaff()
+  } catch {
+    // A sessão local já foi encerrada mesmo quando a rede está indisponível.
   } finally {
-    clearSession()
     router.push('/')
   }
 }

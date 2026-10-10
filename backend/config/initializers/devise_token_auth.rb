@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 DeviseTokenAuth.setup do |config|
+  # Cookies só recuperam sessões no endpoint próprio com CSRF; não autenticam
+  # automaticamente as outras APIs pela funcionalidade nativa da gem.
+  config.cookie_enabled = false
   # Tokens são rotacionados a cada request (mais seguro)
   config.change_headers_on_each_request = true
 
@@ -10,7 +13,8 @@ DeviseTokenAuth.setup do |config|
   # Custo bcrypt para hashing de tokens (10 é seguro para produção)
   config.token_cost = Rails.env.test? ? 4 : 10
 
-  # Máximo de 5 dispositivos simultâneos por usuário
+  # Teto da gem para super_admin. Owners/funcionários têm limite de 1 a 4
+  # pelo plano, aplicado em OwnerSessionTokens/OwnerSessionPolicy.
   config.max_number_of_devices = 5
 
   # Buffer de 5 segundos para requests em lote

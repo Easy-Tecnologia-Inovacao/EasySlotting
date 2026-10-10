@@ -4,11 +4,14 @@ class User < ActiveRecord::Base
 
   include DeviseTokenAuth::Concerns::User
   include PasswordStrengthValidatable
+  include LoginProtection
+  prepend OwnerSessionTokens
 
   before_validation :sanitize_user_data
   before_validation :sync_uid_with_email
 
   validates :role, inclusion: { in: %w[customer owner employee super_admin] }
+  validates :role, uniqueness: { message: 'já possui uma conta de super admin no sistema' }, if: :super_admin?
   validates :name, presence: true, length: { minimum: 2, maximum: 100 }
   validates :phone, format: { with: /\A\(\d{2}\) \d{4,5}-\d{4}\z/, message: "deve ser no formato (XX) XXXXX-XXXX ou (XX) XXXX-XXXX" }, allow_blank: true
 
@@ -64,37 +67,21 @@ class User < ActiveRecord::Base
 
   has_many :notifications, dependent: :destroy
 
-  MAX_FAILED_ATTEMPTS = 5
-  LOCK_DURATION = 30.minutes
-
-  # ── Lockable custom (compatível com DeviseTokenAuth) ───────────────────────
-  def access_locked?
-    locked_at.present? && locked_at > LOCK_DURATION.ago
-  end
-
   def active_for_authentication?
-    super && !access_locked?
+    super && active? && !access_locked?
   end
 
-  def lock_access!
-    update_columns(locked_at: Time.current, failed_attempts: (failed_attempts || 0) + 1)
-  end
-
-  def unlock_access!
-    update_columns(locked_at: nil, failed_attempts: 0)
-  end
-
-  def increment_failed_attempts!
-    new_count = (failed_attempts || 0) + 1
-    if new_count >= MAX_FAILED_ATTEMPTS
-      lock_access!
-    else
-      update_columns(failed_attempts: new_count)
+  # Revoga também a autorização de sessões já emitidas para contas desativadas.
+  def valid_token?(token, client = 'default')
+    return false unless %w[owner employee super_admin].include?(role) && active_for_authentication?
+    with_lock do
+      return false unless %w[owner employee super_admin].include?(role) && active_for_authentication?
+      permitted = OwnerSessionPolicy.new(self).permitted_tokens
+      # Expiração/downgrade revogam os excedentes de modo definitivo, sem
+      # ressuscitá-los caso o plano seja ampliado novamente.
+      update_columns(tokens: permitted) if tokens != permitted
+      permitted.key?(client) && super
     end
-  end
-
-  def reset_failed_attempts!
-    update_columns(failed_attempts: 0) if (failed_attempts || 0) > 0
   end
 
   # Soft delete com anonimização de PII (LGPD Art. 18-VI)
@@ -131,86 +118,8 @@ class User < ActiveRecord::Base
   end
 
   # ── Dispositivos e IP Confiáveis (Estilo Discord / OWASP) ───────────────────
-  def trusted_device?(ip: nil, device_token: nil)
-    # Loopback e redes locais são confiáveis por padrão em dev/lan
-    if ip.present?
-      return true if ['127.0.0.1', '::1', 'localhost'].include?(ip)
-      return true if ip.start_with?('192.168.', '10.', '172.16.', '172.17.', '172.18.', '172.19.',
-                                    '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.',
-                                    '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.')
-    end
-
-    list = trusted_ips || []
-
-    # 1. Verificação por token de dispositivo persistente (OWASP Session Management)
-    return true if device_token.present? && list.include?("device:#{device_token}")
-
-    return true if ip.blank?
-
-    # 2. IP exato na lista
-    return true if list.include?(ip)
-
-    # 3. Tolerância a IP rotativo (modem/operadora) via sub-rede /24 (mesmo pool de IP da operadora)
-    parts = ip.split('.')
-    if parts.size == 4
-      subnet_prefix = parts[0..2].join('.')
-      return true if list.any? { |entry| entry == "subnet:#{subnet_prefix}" || entry.start_with?(subnet_prefix) }
-    end
-
-    false
-  end
-
-  def trusted_ip?(ip)
-    trusted_device?(ip: ip)
-  end
-
-  def add_trusted_device!(ip: nil, device_token: nil)
-    current_ips = (trusted_ips || []).dup
-
-    if device_token.present?
-      token_entry = "device:#{device_token}"
-      current_ips << token_entry unless current_ips.include?(token_entry)
-    end
-
-    if ip.present?
-      current_ips << ip unless current_ips.include?(ip)
-      # Salva prefixo de sub-rede para acomodar rotação de IP no mesmo modem/provedor
-      parts = ip.split('.')
-      if parts.size == 4
-        subnet_entry = "subnet:#{parts[0..2].join('.')}"
-        current_ips << subnet_entry unless current_ips.include?(subnet_entry)
-      end
-    end
-
-    # Mantém no máximo 30 entradas recentes
-    current_ips = current_ips.last(30)
-    update_columns(trusted_ips: current_ips)
-  end
-
-  def add_trusted_ip!(ip)
-    add_trusted_device!(ip: ip)
-  end
-
-  def generate_login_otp!
-    code = sprintf('%06d', SecureRandom.random_number(1_000_000))
-    update_columns(login_otp_code: code, login_otp_sent_at: Time.current)
-    code
-  end
-
-  def verify_login_otp(code)
-    return false if login_otp_code.blank? || login_otp_sent_at.blank?
-    return false if login_otp_sent_at < 10.minutes.ago
-
-    if ActiveSupport::SecurityUtils.secure_compare(login_otp_code.to_s.strip, code.to_s.strip)
-      update_columns(login_otp_code: nil, login_otp_sent_at: nil)
-      true
-    else
-      false
-    end
-  end
-
   def as_json(options = {})
-    super(options.merge(except: [:encrypted_password, :tokens, :confirmation_token, :reset_password_token, :uid, :provider, :login_otp_code, :login_otp_sent_at, :trusted_ips]))
+    super(options.merge(except: [:encrypted_password, :tokens, :confirmation_token, :reset_password_token, :uid, :provider, :login_otp_code, :login_otp_sent_at, :login_otp_attempts, :first_login_at, :failed_attempts, :locked_at, :trusted_ips]))
   end
 
   private
@@ -239,6 +148,10 @@ class User < ActiveRecord::Base
   # Invalida todos os tokens ao mudar a senha (segurança)
   # Isso force logout em todos os dispositivos
   def invalidate_all_tokens
-    self.tokens = {} unless new_record?
+    unless new_record?
+      self.tokens = {}
+      self.login_otp_code = nil
+      self.login_otp_sent_at = nil
+    end
   end
 end

@@ -97,7 +97,10 @@ class EstablishmentSecurityTest < ActionDispatch::IntegrationTest
   private
 
   def update_as(user, attributes)
+    @auth_clients ||= {}
+    headers = user.reload.create_new_auth_token(@auth_clients[user.id])
+    @auth_clients[user.id] = headers['client']
     put '/api/admin/establishment', params: { establishment: attributes },
-        headers: user.create_new_auth_token.merge('X-Establishment-ID' => @establishment.id.to_s), as: :json
+        headers: headers.merge('X-Establishment-ID' => @establishment.id.to_s), as: :json
   end
 end

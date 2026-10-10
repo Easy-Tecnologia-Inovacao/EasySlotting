@@ -1,6 +1,52 @@
 require "test_helper"
 
 class PlanTest < ActiveSupport::TestCase
+  test 'active catalog has one plan per session tier and inactive history cannot be reactivated into an occupied tier' do
+    plans = (1..4).map do |limit|
+      Plan.create!(name: "Faixa #{limit}", code: "tier_#{SecureRandom.hex(4)}", price: limit * 50,
+        duration_months: 1, max_owner_sessions: limit, active: true)
+    end
+    archived = Plan.create!(name: 'Plano anterior', code: "archive_#{SecureRandom.hex(4)}", price: 50,
+      duration_months: 1, max_owner_sessions: 4, active: false)
+    archived.active = true
+    assert_not archived.valid?
+    assert archived.errors[:max_owner_sessions].present?
+    plans.first.update!(name: 'Standard')
+    assert_equal 4, Plan.where(active: true).count
+    archived.price = 250
+    plans.last.update!(active: false)
+    assert archived.save!, archived.errors.full_messages.to_sentence
+    assert_equal 4, Plan.where(active: true).count
+    assert_equal 4, plans.last.reload.max_owner_sessions
+  end
+
+  test 'database rejects duplicate active tiers even when model validation is bypassed' do
+    Plan.create!(name: 'Plus', code: "plus_#{SecureRandom.hex(4)}", price: 100, duration_months: 1, max_owner_sessions: 2)
+    duplicate = Plan.new(name: 'Plus repetido', code: "duplicate_#{SecureRandom.hex(4)}", price: 150,
+      duration_months: 1, max_owner_sessions: 2)
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      Plan.transaction(requires_new: true) { duplicate.save!(validate: false) }
+    end
+  end
+
+  test 'owner session limit is mandatory and accepts only integers between one and four' do
+    plan = Plan.new(name: 'Plano Sessões', code: "sessions_#{SecureRandom.hex(4)}", price: 100, duration_months: 1)
+    assert_equal 1, plan.max_owner_sessions
+    [nil, 0, 5, -1, 2.5, '4invalid'].each do |invalid|
+      plan.max_owner_sessions = invalid
+      assert_not plan.valid?
+      assert plan.errors[:max_owner_sessions].present?
+    end
+    (1..4).each do |limit|
+      plan.max_owner_sessions = limit
+      assert plan.valid?, plan.errors.full_messages.to_sentence
+    end
+    plan.save!
+    assert_raises(ActiveRecord::StatementInvalid) do
+      Plan.transaction(requires_new: true) { plan.update_column(:max_owner_sessions, 5) }
+    end
+  end
+
   test "valida que preço promocional deve ser menor que o preço normal quando promoção está ativa" do
     plan = Plan.new(
       name: "Plano Teste",

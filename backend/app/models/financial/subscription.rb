@@ -7,6 +7,15 @@ class Subscription < ApplicationRecord
   STATUSES = %w[pending active overdue canceled expired].freeze
   BILLING_CYCLES = %w[monthly quarterly yearly].freeze
 
+  # Uma tentativa pendente/futura não substitui o contrato já iniciado.
+  # Um contrato substituído não volta a conceder benefícios após o novo vencer.
+  scope :started, -> { where.not(status: 'pending').where('start_date <= ?', Date.current) }
+
+  def self.current_for_use
+    subscription = started.order(created_at: :desc, id: :desc).first
+    subscription if subscription&.active?
+  end
+
   validates :status, inclusion: { in: STATUSES }
   validates :billing_cycle, inclusion: { in: BILLING_CYCLES }
   validates :start_date, :end_date, presence: true

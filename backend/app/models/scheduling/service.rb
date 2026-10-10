@@ -1,5 +1,6 @@
 class Service < ApplicationRecord
   before_validation :sanitize_data
+  validate -> { PlanQuotaPolicy.validate(self, :services) }
 
   belongs_to :establishment
 

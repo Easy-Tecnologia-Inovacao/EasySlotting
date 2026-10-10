@@ -5,6 +5,29 @@
 
 class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
   wrap_parameters false
+  include LoginInput
+  include StaffRecoveryCookie
+  class LoginStateChanged < StandardError; end
+
+  rescue_from OwnerSessionPolicy::LimitReached do |error|
+    role = @resource&.role
+    AuditLogger.log(action: 'staff_session_limit_reached', user: @resource,
+      ip: request.remote_ip, user_agent: request.user_agent, details: { limit: error.limit })
+    @resource = nil
+    @token.clear!
+    sessions_label = error.limit == 1 ? 'sessão simultânea' : 'sessões simultâneas'
+    render json: {
+      code: role == 'owner' ? 'OWNER_SESSION_LIMIT_REACHED' : 'STAFF_SESSION_LIMIT_REACHED',
+      limit: error.limit,
+      errors: ["Sua conta permite até #{error.limit} #{sessions_label}. Em outro aparelho, abra Dispositivos conectados e encerre um acesso para entrar."]
+    }, status: :conflict
+  end
+
+  rescue_from LoginStateChanged, StaffSessionRecovery::InvalidSession do
+    @resource = nil
+    @token.clear!
+    render json: { errors: ['Não foi possível concluir o login. Tente novamente.'] }, status: :unauthorized
+  end
 
   after_action :stamp_session_metadata, only: :create
 
@@ -23,12 +46,10 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
     raw_otp = params[:otp_code].to_s.strip
     is_otp_attempt = raw_otp.match?(/\A\d{6}\z/)
 
-    Rails.logger.debug "[OTP] raw=#{raw_otp.inspect} is_attempt=#{is_otp_attempt}" if Rails.env.development?
-
     device_token = sanitized_device_token
 
-    # 2. Verificação de role e novo IP/dispositivo (ANTES de criar token Devise)
-    if user && user.valid_password?(params[:password].to_s)
+    # 2. Verificação de role, primeiro acesso e IP (ANTES de criar token Devise)
+    if user&.active_for_authentication? && user.valid_password?(params[:password].to_s)
       unless %w[owner employee super_admin].include?(user.role)
         render json: {
           errors: ['Acesso exclusivo para empresas. Clientes devem acessar pela página do estabelecimento.']
@@ -38,37 +59,24 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
 
       if is_otp_attempt
         # Usuário está enviando o código OTP → verifica
-        unless user.verify_login_otp(raw_otp)
+        unless user.verify_login_otp(raw_otp, ip: request.remote_ip, device_token: device_token)
           render json: { errors: ['Código de verificação inválido ou expirado.'] }, status: :unauthorized
           return
         end
-        # OTP correto → adiciona IP e dispositivo confiável e deixa o super continuar normalmente
-        user.add_trusted_device!(ip: request.remote_ip, device_token: device_token)
-      elsif AuditLogger.new_device?(user: user, ip: request.remote_ip, user_agent: request.user_agent) &&
-            !user.trusted_device?(ip: request.remote_ip, device_token: device_token)
-        # Novo dispositivo/IP sem OTP → exige verificação
-        code = user.generate_login_otp!
-        begin
+      elsif user.login_otp_required?(ip: request.remote_ip)
+        # Primeiro acesso ou IP desconhecido exige e-mail antes de criar sessão.
+        code = user.generate_login_otp!(ip: request.remote_ip, device_token: device_token)
+        if code
           SecurityAlertMailer.login_verification_code(
-            user: user,
-            otp_code: code,
-            ip: request.remote_ip,
-            user_agent: request.user_agent,
-            location: AuditLogger.geolocate(request.remote_ip)
-          ).deliver_now
-        rescue => e
-          Rails.logger.error "[OTP] Erro ao enviar email de verificação: #{e.message}"
+            user: user, otp_code: code, ip: request.remote_ip,
+            user_agent: request.user_agent, location: AuditLogger.geolocate(request.remote_ip)
+          ).deliver_later
         end
-
-        Rails.logger.info "[OTP] ✉️  Código para #{mask_email(user.email)}: #{code}" if Rails.env.development?
 
         render json: {
           requires_verification: true,
           email_masked: mask_email(user.email),
-          methods: [
-            { id: 'email', name: 'Código via E-mail', active: true },
-            { id: 'totp', name: 'Aplicativo Autenticador (2FA)', active: false, badge: 'Em breve' }
-          ]
+          methods: [{ id: 'email', name: 'Código via E-mail', active: true }]
         }, status: :ok
         return
       end
@@ -82,15 +90,34 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
   # DELETE /devise_users/sign_out
   # Invalida o token do cliente e registra o evento no audit log
   def destroy
-    if current_user
-      AuditLogger.log_logout(
-        user: current_user,
-        ip: request.remote_ip,
-        user_agent: request.user_agent
-      )
+    user = @resource
+    client = @token.client
+    payload = staff_recovery_payload
+    if !user && payload
+      begin
+        user = StaffSessionRecovery.new(payload, client: request.headers['client'],
+          uid: request.headers['uid'], csrf: request.headers['X-CSRF-Token']).revoke!
+        client = payload['client']
+      rescue StaffSessionRecovery::InvalidSession
+        # Não apaga o cookie de outra identidade/aba nem restaura credenciais.
+        return render json: { success: true }, status: :ok
+      rescue StaffSessionRecovery::InvalidCsrf
+        return render json: { error: 'Não foi possível validar a saída.' }, status: :forbidden
+      end
     end
-
-    super
+    if user && client
+      user.with_lock do
+        user.tokens.delete(client)
+        user.save!
+      end
+      AuditLogger.log_logout(user: user, ip: request.remote_ip, user_agent: request.user_agent)
+      if payload && payload['user_id'] == user.id && payload['client'] == client
+        delete_staff_recovery_cookie
+      end
+    end
+    @resource = nil
+    @token.clear!
+    render json: { success: true }, status: :ok
   end
 
   protected
@@ -99,9 +126,8 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
     # OTP e verificação de novo IP já foram resolvidos no método create (antes do super).
     # Aqui chegamos apenas quando o login está 100% autorizado.
 
-    # Adiciona IP e dispositivo à lista confiável (caso seja IP novo que passou OTP ou primeiro login)
-    device_token = sanitized_device_token
-    @resource.add_trusted_device!(ip: request.remote_ip, device_token: device_token)
+    # Só confirma o IP depois de concluir a autenticação e criar a sessão.
+    @resource.add_trusted_ip!(ip: request.remote_ip)
 
     # Reseta tentativas falhas
     @resource.reset_failed_attempts!
@@ -131,7 +157,9 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
     is_expired = @resource.password_changed_at.nil? || @resource.password_changed_at < 90.days.ago
     user_data = user_data.merge(password_expired: is_expired)
 
-    render json: { data: user_data }
+    payload, csrf = StaffSessionRecovery.issue!(@resource, @token.client)
+    write_staff_recovery_cookie(payload)
+    render json: { data: user_data, staff_csrf_token: csrf }
   end
 
   # Sobrescreve erro de logout para retornar 200 OK (se o token já tiver sido revogado)
@@ -184,42 +212,37 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
 
   private
 
-  def sanitized_device_token
-    raw = request.headers['X-Device-Token'].to_s.strip.presence || params[:device_token].to_s.strip.presence
-    raw&.slice(0, 100)&.gsub(/[^a-zA-Z0-9_-]/, '').presence
+  # Revalida sob lock para não emitir sessão se a senha/conta mudar durante o login.
+  def create_and_assign_token
+    @resource.with_lock do
+      unless @resource.active_for_authentication? && %w[owner employee super_admin].include?(@resource.role) &&
+             @resource.valid_password?(params[:password])
+        raise LoginStateChanged
+      end
+      device = sanitized_device_token
+      metadata = device.present? ? { device_digest: Digest::SHA256.hexdigest(device) } : {}
+      @token = @resource.create_token(**metadata)
+      @resource.save!
+    end
   end
 
   def login_params
     params.permit(:email, :password, :otp_code, :device_token)
   end
 
-  # Remove o token gerado pelo Devise quando o login ainda não está completo
-  # (ex: aguardando verificação OTP). Isso garante que o after_action
-  # update_auth_header do DeviseTokenAuth não reponha os headers de auth.
-  def revoke_session_token!
-    return unless @resource && @token&.client
-    tokens = @resource.tokens || {}
-    tokens.delete(@token.client)
-    @resource.update_columns(tokens: tokens)
-    @token.client = nil
-  end
-
   # Registra metadata da sessão (IP, User Agent, device)
   def stamp_session_metadata
-    return unless current_user
+    return unless @resource && @token&.client && response.successful?
 
-    client_id = response.headers['client']
-    return if client_id.blank?
-
-    tokens = current_user.tokens || {}
-    entry  = (tokens[client_id] || {}).dup
-    entry['ua'] = request.user_agent.to_s[0, 200]
-    entry['ip'] = request.remote_ip
-    entry['name'] ||= device_friendly_name(request.user_agent)
-    entry['last_seen_at'] = Time.current.to_i
-    tokens[client_id] = entry
-
-    current_user.update_columns(tokens: tokens, updated_at: Time.current)
+    @resource.with_lock do
+      entry = @resource.tokens[@token.client]
+      return unless entry
+      entry['ua'] = request.user_agent.to_s[0, 200]
+      entry['ip'] = request.remote_ip
+      entry['name'] ||= device_friendly_name(request.user_agent)
+      entry['last_seen_at'] = Time.current.to_i
+      @resource.update_columns(tokens: @resource.tokens, updated_at: Time.current)
+    end
   end
 
   # (log_staff_login removido: o log agora acontece dentro de render_create_success

@@ -19,6 +19,7 @@
 
   before_validation :sanitize_data
   before_validation :fill_snapshots
+  validate -> { PlanQuotaPolicy.validate(self, :appointments) }
 
   after_commit :send_booking_notifications, on: :create
   after_save :send_reschedule_notifications, if: :saved_change_to_appointment_date?
