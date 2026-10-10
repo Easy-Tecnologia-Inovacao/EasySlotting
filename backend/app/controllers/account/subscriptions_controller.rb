@@ -121,8 +121,7 @@ class Account::SubscriptionsController < ApplicationController
             establishment_id: @establishment.id,
             establishment_name: @establishment.name,
             plan_id: subscription.plan_id,
-            reason: raw_reason,
-            details: sanitized_details
+            reason: raw_reason
           }
         )
       end

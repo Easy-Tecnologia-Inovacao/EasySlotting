@@ -83,7 +83,7 @@ class Rack::Attack
   # 6. Proteção de Endpoints Administrativos
   # Limita requisições administrativas a 45 por minuto por IP
   throttle('admin/ip', limit: 45, period: 1.minute) do |req|
-    if req.path.start_with?('/api/admin/') || req.path.include?('/admin/')
+    if req.path.start_with?('/api/admin/', '/api/super_admin/') || req.path.include?('/admin/')
       req.ip
     end
   end

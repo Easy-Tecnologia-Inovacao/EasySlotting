@@ -11,13 +11,13 @@
             </span>
             <h1 class="page-title mb-2">Dashboard do Super Admin</h1>
             <p class="page-subtitle mb-0">
-              Acompanhe planos, assinaturas, receita e os principais indicadores da plataforma em tempo real.
+              Acompanhe planos, contratos vigentes e os principais indicadores da plataforma.
             </p>
           </div>
           <div class="col-12 col-xl-4 text-xl-end">
-            <span class="text-muted small">
+            <span v-if="generatedAt && !loading && !errorMessage" class="text-muted small">
               <i class="bi bi-clock me-1"></i>
-              Atualizado em {{ new Date().toLocaleString('pt-BR') }}
+              Dados gerados em {{ formatDateTime(generatedAt) }}
             </span>
           </div>
         </div>
@@ -29,7 +29,12 @@
         <p class="mt-3 text-secondary mb-0">Carregando dashboard...</p>
       </div>
 
-      <template v-else>
+      <div v-else-if="errorMessage" class="alert alert-danger rounded-4" role="alert">
+        <p class="mb-3">{{ errorMessage }}</p>
+        <button type="button" class="btn btn-outline-danger" @click="loadDashboard">Tentar novamente</button>
+      </div>
+
+      <template v-else-if="hasLoaded">
 
         <!-- Cards de resumo -->
         <section class="stats-grid mb-4">
@@ -45,7 +50,7 @@
             <div class="stat-icon bg-success bg-opacity-10 text-success">
               <i class="bi bi-check-circle-fill"></i>
             </div>
-            <div class="stat-label">Assinaturas ativas</div>
+            <div class="stat-label">Contratos vigentes</div>
             <div class="stat-value text-success">{{ summary.active_subscriptions_count }}</div>
           </div>
 
@@ -82,18 +87,19 @@
             <div class="stat-icon bg-warning bg-opacity-10 text-warning">
               <i class="bi bi-cash-coin"></i>
             </div>
-            <div class="stat-label">Receita no mês</div>
-            <div class="stat-value">R$ {{ formatPrice(summary.monthly_revenue) }}</div>
+            <div class="stat-label">Valor contratado no mês</div>
+            <div class="stat-value">R$ {{ formatPrice(summary.monthly_contracted_value) }}</div>
+            <p class="stat-sub small text-body-secondary mb-0">Valor bruto dos contratos cadastrados no mês, sem pendentes. Inclui trocas de plano e valores futuros; não representa pagamentos recebidos.</p>
           </div>
         </section>
 
-        <!-- Gráficos: Assinaturas + Cancelamentos + Tendência de Receita -->
+        <!-- Gráficos em largura total, um painel por linha -->
         <section class="row g-4 mb-4">
-          <div class="col-12 col-xl-5">
+          <div class="col-12">
             <div class="chart-card h-100">
               <div class="chart-header">
                 <h2 class="chart-title mb-1">Assinaturas por plano</h2>
-                <p class="chart-subtitle mb-0">Distribuição por tipo de plano.</p>
+                <p class="chart-subtitle mb-0">Contrato iniciado mais recente por estabelecimento ativo, vigente e sem pendências. Inclui cancelados até o fim do período.</p>
               </div>
               <div class="chart-wrapper">
                 <Bar :data="subscriptionsByPlanData" :options="barOptions" />
@@ -101,7 +107,7 @@
             </div>
           </div>
 
-          <div class="col-12 col-xl-3">
+          <div class="col-12">
             <div class="chart-card h-100">
               <div class="chart-header">
                 <h2 class="chart-title mb-1">Motivos de cancelamento</h2>
@@ -113,11 +119,11 @@
             </div>
           </div>
 
-          <div class="col-12 col-xl-4">
+          <div class="col-12">
             <div class="chart-card h-100">
               <div class="chart-header">
-                <h2 class="chart-title mb-1">Tendência de receita</h2>
-                <p class="chart-subtitle mb-0">Últimos 6 meses.</p>
+                <h2 class="chart-title mb-1">Valores contratados</h2>
+                <p class="chart-subtitle mb-0">Últimos 6 meses por cadastro do contrato, no horário de Brasília. Não representa recebimentos.</p>
               </div>
               <div class="chart-wrapper">
                 <Line :data="revenueTrendData" :options="lineOptions" />
@@ -144,7 +150,6 @@
                   <th class="px-4 py-3">Motivo</th>
                   <th class="py-3">Plano</th>
                   <th class="py-3">Perfil</th>
-                  <th class="py-3">Detalhes</th>
                   <th class="py-3 pe-4 text-end">Data</th>
                 </tr>
               </thead>
@@ -161,12 +166,11 @@
                       {{ item.canceled_by_role || '-' }}
                     </span>
                   </td>
-                  <td class="text-secondary">{{ item.details || 'Sem detalhes informados.' }}</td>
                   <td class="text-end pe-4 text-muted small">{{ formatDateTime(item.created_at) }}</td>
                 </tr>
 
                 <tr v-if="recentCancellations.length === 0">
-                  <td colspan="5" class="text-center py-5 text-secondary">
+                  <td colspan="4" class="text-center py-5 text-secondary">
                     <i class="bi bi-check-circle fs-2 d-block mb-2 text-success"></i>
                     Nenhum cancelamento registrado ainda.
                   </td>
@@ -176,9 +180,6 @@
           </div>
         </section>
 
-        <div v-if="errorMessage" class="alert alert-danger rounded-4 mt-4 shadow-sm">
-          <i class="bi bi-exclamation-circle-fill me-2"></i>{{ errorMessage }}
-        </div>
       </template>
     </div>
   </SuperAdminLayout>
@@ -208,6 +209,8 @@ ChartJS.register(Title, Tooltip, Legend, ArcElement, BarElement, LineElement, Po
 
 const loading      = ref(true)
 const errorMessage = ref('')
+const hasLoaded = ref(false)
+const generatedAt = ref(null)
 
 const summary = ref({
   plans_count:                   0,
@@ -216,28 +219,41 @@ const summary = ref({
   establishments_count:          0,
   customers_count:               0,
   new_establishments_this_month: 0,
-  monthly_revenue:               0
+  monthly_contracted_value:      0
 })
 
 const subscriptionsByPlan  = ref([])
 const cancellationReasons  = ref([])
 const recentCancellations  = ref([])
 const revenueTrend         = ref([])
+let hasRequested = false
 
 const loadDashboard = async () => {
+  if (loading.value && hasRequested) return
+  hasRequested = true
   loading.value      = true
   errorMessage.value = ''
 
   try {
     const response = await api.get('/super_admin/dashboard')
-    summary.value             = response.data?.summary            || summary.value
+    if (!response.data?.summary || !response.data?.generated_at ||
+        !Array.isArray(response.data?.charts?.subscriptions_by_plan) ||
+        !Array.isArray(response.data?.charts?.cancellation_reasons) ||
+        !Array.isArray(response.data?.charts?.contracted_value_trend) ||
+        !Array.isArray(response.data?.recent_cancellations)) throw new Error('Resposta inválida')
+    summary.value             = response.data.summary
     subscriptionsByPlan.value = response.data?.charts?.subscriptions_by_plan || []
     cancellationReasons.value = response.data?.charts?.cancellation_reasons  || []
-    revenueTrend.value        = response.data?.charts?.revenue_trend          || []
+    revenueTrend.value        = response.data.charts.contracted_value_trend
     recentCancellations.value = response.data?.recent_cancellations           || []
+    generatedAt.value = response.data.generated_at
+    hasLoaded.value = true
   } catch (error) {
-    console.error('Erro ao carregar dashboard:', error)
-    errorMessage.value = error?.response?.data?.error || 'Não foi possível carregar o dashboard.'
+    hasLoaded.value = false
+    generatedAt.value = null
+    errorMessage.value = error?.response?.status === 429
+      ? 'Muitas atualizações. Aguarde um minuto e tente novamente.'
+      : 'Não foi possível carregar o dashboard. Tente novamente.'
   } finally {
     loading.value = false
   }
@@ -268,8 +284,8 @@ const cancellationReasonsData = computed(() => ({
 const revenueTrendData = computed(() => ({
   labels: revenueTrend.value.map(i => i.month),
   datasets: [{
-    label: 'Receita (R$)',
-    data: revenueTrend.value.map(i => i.revenue),
+    label: 'Valor contratado (R$)',
+    data: revenueTrend.value.map(i => i.value),
     fill: true,
     borderColor: '#0d6efd',
     backgroundColor: 'rgba(13, 110, 253, 0.08)',
@@ -430,12 +446,12 @@ onMounted(() => { loadDashboard() })
 }
 
 .chart-wrapper {
-  height: 360px;
+  height: 420px;
   padding: 1rem 1.5rem 1.5rem;
 }
 
 .pie-wrapper {
-  height: 360px;
+  height: 420px;
 }
 
 .badge-soft-warning {
