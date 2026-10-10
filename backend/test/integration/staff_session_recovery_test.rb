@@ -1,6 +1,8 @@
 require 'test_helper'
+require_relative '../support/email_login_test_helper'
 
 class StaffSessionRecoveryTest < ActionDispatch::IntegrationTest
+  include EmailLoginTestHelper
   parallelize(workers: 1)
   PASSWORD = 'TesteSeguro#2026'.freeze
   RESTORE = '/api/devise_users/restore_session'.freeze
@@ -181,7 +183,7 @@ class StaffSessionRecoveryTest < ActionDispatch::IntegrationTest
     cookies.delete(COOKIE)
     post '/api/devise_users/sign_in', params: {
       email: @user.email, password: PASSWORD, device_token: 'b' * 64
-    }, as: :json
+    }, headers: { 'REMOTE_ADDR' => '192.168.1.99' }, as: :json
     assert_response :success
     assert response.parsed_body['requires_verification']
     assert_not response.parsed_body.key?('staff_csrf_token')
@@ -215,9 +217,9 @@ class StaffSessionRecoveryTest < ActionDispatch::IntegrationTest
   private
 
   def login(user = @user, password: PASSWORD)
-    post '/api/devise_users/sign_in', params: {
+    login_with_email_verification('/api/devise_users/sign_in', params: {
       email: user.email, password: password, device_token: 'a' * 64
-    }, as: :json
+    })
     assert_response :success
     @headers = response.headers.slice('access-token', 'client', 'uid')
     @recovery_headers = { 'X-Staff-Client' => @headers['client'], 'X-Staff-Uid' => @headers['uid'],

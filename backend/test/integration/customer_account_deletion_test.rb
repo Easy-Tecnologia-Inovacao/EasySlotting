@@ -1,6 +1,8 @@
 require 'test_helper'
+require_relative '../support/email_login_test_helper'
 
 class CustomerAccountDeletionTest < ActionDispatch::IntegrationTest
+  include EmailLoginTestHelper
   include ActiveJob::TestHelper
   parallelize(workers: 1)
   PASSWORD = 'TesteSeguro#2026'.freeze
@@ -14,8 +16,8 @@ class CustomerAccountDeletionTest < ActionDispatch::IntegrationTest
     @customer = Customer.create!(name: 'Cliente Seguro', email: "customer-#{suffix}@example.test",
                                  password: PASSWORD, establishment: @establishment)
     @email = @customer.email
-    post "/api/customer_auth/#{@establishment.slug}/sign_in",
-         params: { email: @email, password: PASSWORD, device_token: 'a' * 64 }, as: :json
+    login_with_email_verification("/api/customer_auth/#{@establishment.slug}/sign_in",
+         params: { email: @email, password: PASSWORD, device_token: 'a' * 64 })
     assert_response :success
     @token = response.parsed_body.fetch('access_token')
     @csrf = response.parsed_body.fetch('csrf_token')

@@ -10,10 +10,13 @@ embora o registro no servidor ainda pudesse ocupar uma vaga do plano.
 Agora, o Vue recupera a mesma sessão no servidor antes de liberar a rota.
 O access token continua fora de `localStorage` e `sessionStorage`.
 
-Não há alteração no protocolo JWT/refresh de clientes, nas quotas ou no OTP.
+Esta correção de F5 não altera o protocolo JWT/refresh de clientes ou as quotas.
+A [política atual de OTP por e-mail](email-login-verification.md) exige código no
+primeiro login e em IP desconhecido nos quatro perfis. Recuperar uma sessão
+existente válida por F5 não constitui novo login e não pede outro código.
 Owner/funcionário continuam com 1 a 4 vagas por conta conforme a política de plano;
 super admin continua com 5. A recuperação preserva `client` e `issued_at`, não
-substitui o login com senha e não registra um novo aparelho confiável.
+substitui o login com senha e não registra um novo IP como reconhecido.
 
 ## Login e armazenamento
 

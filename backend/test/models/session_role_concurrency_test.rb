@@ -14,7 +14,7 @@ class SessionRoleConcurrencyTest < ActiveSupport::TestCase
     @employee = User.create!(name: 'Funcionario', email: "race-employee-#{suffix}@example.test", password: PASSWORD, role: 'employee')
     EstablishmentMembership.create!(user: @employee, establishment: @company, role: 'employee', active: true)
     @customer = Customer.create!(name: 'Cliente', email: "race-customer-#{suffix}@example.test", password: PASSWORD, establishment: @company)
-    @customer.add_trusted_device!(ip: '127.0.0.1', device_token: 'a' * 64)
+    @customer.add_trusted_ip!(ip: '127.0.0.1')
   end
 
   teardown do

@@ -238,6 +238,7 @@
                   type="button"
                   class="nav-link-sidebar text-danger hover-danger w-100 border-0 bg-transparent text-start"
                   @click="handleLogout"
+                  :disabled="loggingOut || savingPassword"
                 >
                   <i class="bi bi-box-arrow-left me-3"></i><span>Sair do painel</span>
                 </button>
@@ -399,9 +400,19 @@
 
           <div class="modal-footer border-top-0 pt-0">
             <button
+              type="button"
+              class="btn btn-outline-danger rounded-pill px-4 fw-semibold me-auto"
+              @click="handleLogout"
+              :disabled="loggingOut || savingPassword"
+            >
+              <i class="bi bi-box-arrow-left me-2" aria-hidden="true"></i>
+              {{ loggingOut ? 'Saindo...' : 'Sair da conta' }}
+            </button>
+            <button
+              type="button"
               class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm"
               @click="salvarNovaSenha"
-              :disabled="savingPassword || !isPasswordValid || !passwordForm.current_password"
+              :disabled="loggingOut || savingPassword || !isPasswordValid || !passwordForm.current_password"
             >
               {{ savingPassword ? 'Salvando...' : 'Salvar nova senha' }}
             </button>
@@ -559,9 +570,21 @@ const logout = async () => {
   }
 }
 
+const loggingOut = ref(false)
+
 const handleLogout = async () => {
-  closeSidebarOnMobile()
-  await logout()
+  if (loggingOut.value || savingPassword.value) return
+  loggingOut.value = true
+  try {
+    closeSidebarOnMobile()
+    modalTrocaSenhaInstance?.hide()
+    passwordForm.value = { current_password: '', password: '', password_confirmation: '' }
+    passwordError.value = ''
+    await logout()
+  } finally {
+    limparBackdropsModal()
+    loggingOut.value = false
+  }
 }
 
 // 🔒 Senha Obrigatória Primeiro Acesso
@@ -714,7 +737,7 @@ const isExpiredState = computed(() => {
 })
 
 async function abrirModalTrocaSenhaSeNecessario() {
-  if (!shouldForcePasswordChange()) return
+  if (loggingOut.value || !getStaffAccessToken() || !shouldForcePasswordChange()) return
 
   await nextTick()
 
@@ -728,6 +751,7 @@ async function abrirModalTrocaSenhaSeNecessario() {
 }
 
 async function salvarNovaSenha() {
+  if (loggingOut.value || savingPassword.value) return
   passwordError.value = ''
 
   if (!isPasswordValid.value) {

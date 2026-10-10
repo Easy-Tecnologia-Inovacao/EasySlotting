@@ -11,6 +11,7 @@ class CustomerMultipleSessionsTest < ActionDispatch::IntegrationTest
     @owner = User.create!(name: 'Proprietario', email: "multi-owner-#{suffix}@example.test", password: PASSWORD, role: 'owner')
     @company = Establishment.create!(name: 'Empresa', slug: "multi-#{suffix}", owner: @owner)
     @customer = Customer.create!(name: 'Cliente', email: "multi-customer-#{suffix}@example.test", password: PASSWORD, establishment: @company)
+    @customer.add_trusted_ip!(ip: '127.0.0.1')
     @login = "/api/customer_auth/#{@company.slug}/sign_in"
     @logout = "/api/customer_auth/#{@company.slug}/sign_out"
     @refresh = "/api/customer_auth/#{@company.slug}/refresh"

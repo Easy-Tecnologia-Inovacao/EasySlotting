@@ -167,7 +167,7 @@ Agendamento/
 - Owner e cada funcionário: de 1 a 4 sessões conforme o plano do proprietário, com quotas independentes e sem somar benefícios. Super admin: uma conta no sistema, até cinco sessões. Listagem/revogação das próprias sessões no servidor
 - Recuperação e redefinição de senha por e-mail
 - Política atual de senha: **90 dias**; o Rails bloqueia escritas quando expirada, com exceções para manutenção da conta/autenticação
-- Primeiro login válido registra confiança; IP ou dispositivo desconhecido nos seguintes exige OTP por e-mail
+- Primeiro login e IP desconhecido exigem OTP por e-mail para os quatro perfis; IP já reconhecido permite login com senha, inclusive em outro navegador
 - Cadastro cria owner sem sessão automática; super admin é configurado explicitamente no bootstrap
 
 #### Clientes — Isolados por Estabelecimento
@@ -181,7 +181,7 @@ Agendamento/
 - Serviço `CustomerJsonWebToken` verifica assinatura, emissor, audiência, expiração e tipo; o servidor também confere conta, estabelecimento e `sid`
 - Cadastro encaminha para login; primeiro acesso e OTP seguem a regra compartilhada com staff
 
-Veja os fluxos, exceções e contratos no [guia de autenticação](docs/authentication.md). TOTP ainda está inativo; as proteções implementadas não representam certificação LGPD/OWASP.
+Veja os fluxos, exceções e contratos no [guia de autenticação](docs/authentication.md) e na [verificação por e-mail](docs/email-login-verification.md). Somente e-mail está disponível; as proteções implementadas não representam certificação LGPD/OWASP.
 
 #### Força de Senha (válida para ambos)
 

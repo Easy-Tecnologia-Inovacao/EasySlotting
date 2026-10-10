@@ -1,3 +1,5 @@
+require 'ipaddr'
+
 # Regras comuns de login, aplicadas no servidor para staff e clientes.
 module LoginProtection
   extend ActiveSupport::Concern
@@ -28,19 +30,23 @@ module LoginProtection
     first_login_at.nil?
   end
 
-  def trusted_device?(ip: nil, device_token: nil)
-    return false if ip.blank? || !valid_device_token?(device_token)
-
-    list = trusted_ips || []
-    # IP sozinho não identifica um aparelho: vários usuários podem compartilhar a rede.
-    list.include?(ip.to_s) && list.include?(device_entry(device_token))
+  def login_otp_required?(ip:)
+    first_successful_login? || !trusted_ip?(ip: ip)
   end
 
-  def add_trusted_device!(ip: nil, device_token: nil)
+  def trusted_ip?(ip:)
+    address = normalized_login_ip(ip)
+    address.present? && Array(trusted_ips).filter_map { |entry| normalized_login_ip(entry) }.include?(address)
+  end
+
+  def add_trusted_ip!(ip:)
+    address = normalized_login_ip(ip)
+    return unless address
+
     with_lock do
-      entries = (trusted_ips || []).dup
-      entries << device_entry(device_token) if valid_device_token?(device_token)
-      entries << ip.to_s if ip.present?
+      # Descarta hashes de aparelhos legados; só IPs confirmados dispensam OTP.
+      entries = Array(trusted_ips).filter_map { |entry| normalized_login_ip(entry) }
+      entries << address
       update_columns(trusted_ips: entries.uniq.last(30), first_login_at: first_login_at || Time.current)
     end
   end
@@ -77,12 +83,11 @@ module LoginProtection
 
   private
 
-  def valid_device_token?(token)
-    token.is_a?(String) && token.match?(DEVICE_TOKEN_FORMAT)
-  end
-
-  def device_entry(token)
-    "device:#{Digest::SHA256.hexdigest(token)}"
+  def normalized_login_ip(ip)
+    return unless ip.is_a?(String) && ip.bytesize.between?(1, 64) && !ip.include?('/')
+    IPAddr.new(ip).to_s
+  rescue IPAddr::InvalidAddressError
+    nil
   end
 
   def otp_digest(code, ip, device_token)

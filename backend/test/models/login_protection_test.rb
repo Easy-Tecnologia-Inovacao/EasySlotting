@@ -36,12 +36,36 @@ class LoginProtectionTest < ActiveSupport::TestCase
     assert_equal 1, @user.reload.login_otp_attempts
   end
 
-  test 'IP alone or absent context never identifies a trusted device' do
-    @user.add_trusted_device!(**@context)
-    assert @user.trusted_device?(**@context)
-    assert_not @user.trusted_device?(ip: @context[:ip])
-    assert_not @user.trusted_device?(device_token: @context[:device_token])
-    assert_not @user.trusted_device?(**@context.merge(ip: '192.168.1.2'))
+  test 'first access and unknown IP require OTP while a confirmed IP is enough' do
+    assert @user.login_otp_required?(ip: @context[:ip])
+    @user.add_trusted_ip!(ip: @context[:ip])
+    assert @user.trusted_ip?(ip: @context[:ip])
+    assert_not @user.login_otp_required?(ip: @context[:ip])
+    assert @user.login_otp_required?(ip: '192.168.1.2')
+    assert @user.login_otp_required?(ip: nil)
+    assert_equal [@context[:ip]], @user.reload.trusted_ips
+  end
+
+  test 'legacy device hashes are ignored and removed while IPv6 addresses are normalized' do
+    @user.update_columns(trusted_ips: ['device:' + 'a' * 64, 'not-an-ip', '2001:0db8:0:0:0:0:0:1'])
+    assert @user.trusted_ip?(ip: '2001:db8::1')
+    assert @user.login_otp_required?(ip: '2001:db8::1'), 'an IP entry must not bypass first-login verification'
+    assert_not @user.trusted_ip?(ip: '192.168.1.1')
+    @user.add_trusted_ip!(ip: '2001:db8::1')
+    assert_equal ['2001:db8::1'], @user.reload.trusted_ips
+  end
+
+  test 'invalid addresses and network ranges cannot become trusted and old IPs eventually require verification again' do
+    [nil, '', '192.168.1.0/24', 'not-an-ip', ['127.0.0.1']].each do |invalid|
+      @user.add_trusted_ip!(ip: invalid)
+      assert @user.login_otp_required?(ip: invalid)
+    end
+    assert_nil @user.reload.first_login_at
+    assert_empty @user.trusted_ips
+    31.times { |number| @user.add_trusted_ip!(ip: "192.0.2.#{number + 1}") }
+    assert_equal 30, @user.reload.trusted_ips.size
+    assert @user.login_otp_required?(ip: '192.0.2.1')
+    assert_not @user.login_otp_required?(ip: '192.0.2.31')
   end
 
   test 'password attempts lock the account and expired locks restart the counter' do

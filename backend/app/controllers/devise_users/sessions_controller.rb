@@ -48,7 +48,7 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
 
     device_token = sanitized_device_token
 
-    # 2. Verificação de role e novo IP/dispositivo (ANTES de criar token Devise)
+    # 2. Verificação de role, primeiro acesso e IP (ANTES de criar token Devise)
     if user&.active_for_authentication? && user.valid_password?(params[:password].to_s)
       unless %w[owner employee super_admin].include?(user.role)
         render json: {
@@ -57,20 +57,14 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
         return
       end
 
-      # O primeiro login confirma o dispositivo inicial; novos IPs/dispositivos
-      # só exigem OTP depois que já existe um login bem-sucedido.
-      first_successful_login = user.first_successful_login?
-
       if is_otp_attempt
         # Usuário está enviando o código OTP → verifica
         unless user.verify_login_otp(raw_otp, ip: request.remote_ip, device_token: device_token)
           render json: { errors: ['Código de verificação inválido ou expirado.'] }, status: :unauthorized
           return
         end
-        # OTP correto → adiciona IP e dispositivo confiável e deixa o super continuar normalmente
-        user.add_trusted_device!(ip: request.remote_ip, device_token: device_token)
-      elsif !first_successful_login && !user.trusted_device?(ip: request.remote_ip, device_token: device_token)
-        # Novo dispositivo/IP sem OTP → exige verificação
+      elsif user.login_otp_required?(ip: request.remote_ip)
+        # Primeiro acesso ou IP desconhecido exige e-mail antes de criar sessão.
         code = user.generate_login_otp!(ip: request.remote_ip, device_token: device_token)
         if code
           SecurityAlertMailer.login_verification_code(
@@ -82,10 +76,7 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
         render json: {
           requires_verification: true,
           email_masked: mask_email(user.email),
-          methods: [
-            { id: 'email', name: 'Código via E-mail', active: true },
-            { id: 'totp', name: 'Aplicativo Autenticador (2FA)', active: false, badge: 'Em breve' }
-          ]
+          methods: [{ id: 'email', name: 'Código via E-mail', active: true }]
         }, status: :ok
         return
       end
@@ -135,9 +126,8 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
     # OTP e verificação de novo IP já foram resolvidos no método create (antes do super).
     # Aqui chegamos apenas quando o login está 100% autorizado.
 
-    # Adiciona IP e dispositivo à lista confiável (caso seja IP novo que passou OTP ou primeiro login)
-    device_token = sanitized_device_token
-    @resource.add_trusted_device!(ip: request.remote_ip, device_token: device_token)
+    # Só confirma o IP depois de concluir a autenticação e criar a sessão.
+    @resource.add_trusted_ip!(ip: request.remote_ip)
 
     # Reseta tentativas falhas
     @resource.reset_failed_attempts!

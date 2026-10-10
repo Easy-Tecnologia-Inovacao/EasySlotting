@@ -18,7 +18,7 @@ class OwnerSessionLimitsTest < ActionDispatch::IntegrationTest
     @plan = @tiers.fetch(4)
     @subscription = @establishment.subscriptions.create!(plan: @plan, status: 'active', start_date: Date.current,
       end_date: 1.month.from_now.to_date, billing_cycle: 'monthly')
-    DEVICES.each { |device| @owner.add_trusted_device!(ip: '127.0.0.1', device_token: device) }
+    @owner.add_trusted_ip!(ip: '127.0.0.1')
   end
 
   teardown do
@@ -175,7 +175,8 @@ class OwnerSessionLimitsTest < ActionDispatch::IntegrationTest
 
   test 'OTP challenge and invalid passwords do not reveal the limit or issue a session' do
     DEVICES.first(4).each { |device| login(device) }
-    post '/api/devise_users/sign_in', params: { email: @owner.email, password: PASSWORD, device_token: 'f' * 64 }, as: :json
+    post '/api/devise_users/sign_in', params: { email: @owner.email, password: PASSWORD, device_token: 'f' * 64 },
+      headers: { 'REMOTE_ADDR' => '192.168.1.99' }, as: :json
     assert_response :success
     assert response.parsed_body['requires_verification']
     assert response.headers['access-token'].blank?

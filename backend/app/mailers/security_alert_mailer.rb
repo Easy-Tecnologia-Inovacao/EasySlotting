@@ -72,7 +72,7 @@ class SecurityAlertMailer < ApplicationMailer
 
     mail(
       to: @user.email,
-      subject: "🔑 #{@otp_code} é o seu código de verificação de login - EasySlotting"
+      subject: '🔑 Código de verificação de login - EasySlotting'
     )
   end
 end

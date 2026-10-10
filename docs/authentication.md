@@ -1,6 +1,8 @@
 # Autenticação, sessão e logout do EasySlotting
 
-Referência técnica da implementação de 09/10/2026, para manutenção e novas funcionalidades. Este documento cobre cadastro, login da equipe e dos clientes, primeiro acesso, dispositivo confiável, OTP por e-mail, tokens, renovação, revogação, recuperação de senha e integração Rails/Vue/PostgreSQL.
+Referência técnica iniciada em 09/10/2026 e atualizada em 10/10/2026, para manutenção e novas funcionalidades. Este documento cobre cadastro, login da equipe e dos clientes, primeiro acesso, IP reconhecido, OTP por e-mail, tokens, renovação, revogação, recuperação de senha e integração Rails/Vue/PostgreSQL.
+
+A [verificação por e-mail](email-login-verification.md) detalha a regra atual: primeiro login e IP desconhecido exigem código nos quatro perfis. O identificador do navegador não dispensa o código.
 
 O [relatório de revisão](authentication-security-review.md) registra os problemas corrigidos e a validação realizada. Para infraestrutura, consulte [ambientes](environments.md), [staging na VM](staging-local.md) e [produção na Hostinger](hostinger-vps.md). A referência de comportamento é o código; ao alterar um contrato, atualize este documento e os testes correspondentes.
 
@@ -74,7 +76,7 @@ Os caminhos são relativos à raiz do repositório. As pastas `models/core` e `m
 | [config/routes.rb](../backend/config/routes.rb) | Rotas de login, cadastro, renovação, logout, perfil e sessões |
 | [application_controller.rb](../backend/app/controllers/application_controller.rb) | Tenant autorizado, permissões, política de senha, rejeição de credenciais na URL e cache sensível |
 | [concerns/login_input.rb](../backend/app/controllers/concerns/login_input.rb) | Tipos, formatos e tamanhos de entrada do login |
-| [concerns/login_protection.rb](../backend/app/models/concerns/login_protection.rb) | Primeiro login, IP/dispositivo, bloqueio e geração/consumo de OTP |
+| [concerns/login_protection.rb](../backend/app/models/concerns/login_protection.rb) | Primeiro login, IP reconhecido, bloqueio e geração/consumo de OTP |
 | [devise_users/sessions_controller.rb](../backend/app/controllers/devise_users/sessions_controller.rb) | Login/OTP/logout da equipe e metadados de sessão |
 | [customer_auth/sessions_controller.rb](../backend/app/controllers/customer_auth/sessions_controller.rb) | Login/OTP de cliente, emissão, refresh, cookies e logout |
 | [concerns/customer_authenticatable.rb](../backend/app/controllers/concerns/customer_authenticatable.rb) | Resolução do Bearer, validação da sessão e `authenticate_customer!` |
@@ -119,14 +121,14 @@ Os caminhos são relativos à raiz do repositório. As pastas `models/core` e `m
 ## Cadastro e primeiro acesso
 
 1. O cadastro valida e persiste a conta. No onboarding empresarial, owner, estabelecimento, endereço e membership são criados dentro de uma transação.
-2. O cadastro não emite credenciais de sessão nem registra dispositivo como confiável. A tela encaminha para login.
+2. O cadastro não emite credenciais de sessão nem registra IP como reconhecido. A tela encaminha para login.
 3. O login valida e-mail, senha, estado da conta e tipo de acesso. O servidor decide se precisa de OTP.
-4. Se `first_login_at` estiver vazio e as credenciais forem válidas, o primeiro login é permitido sem OTP. Após sucesso, o servidor registra o primeiro acesso, o IP observado e o identificador de dispositivo válido, quando enviado.
-5. Em logins seguintes, IP e identificador de dispositivo precisam ser conhecidos; caso contrário, é solicitado OTP antes da emissão de credenciais.
+4. Se `first_login_at` estiver vazio e as credenciais forem válidas, o primeiro login exige OTP por e-mail. Somente depois da confirmação e do sucesso da autenticação o servidor registra o primeiro acesso e o IP observado.
+5. Em logins seguintes, um IP desconhecido exige OTP antes da emissão de credenciais. Um IP já reconhecido permite login com senha, inclusive em outro navegador. A regra é a mesma para owner, funcionário, super admin e cliente.
 
 O primeiro cadastro público não se torna super admin. Os cadastros staff fixam `role: 'owner'` no servidor; clientes são registros `Customer`. O super admin de staging/produção é criado pelo bootstrap com `BOOTSTRAP_ADMIN_EMAIL` e `BOOTSTRAP_ADMIN_PASSWORD`. O bootstrap não promove uma conta comum existente nem substitui a senha de um administrador existente. Sua execução está ligada aos seeds de runtime; `db:prepare` aplica migrações e usa seeds ao inicializar o banco, não recria o administrador em cada login ou deploy.
 
-O primeiro acesso sem OTP é uma decisão deste produto: ele comprova a senha e registra o navegador inicial, mas não comprova o controle da caixa de e-mail. `User` não habilita atualmente o módulo Devise `:confirmable`. Se a confirmação de e-mail se tornar obrigatória, ela exige um fluxo próprio no servidor e testes antes de liberar o primeiro token.
+O primeiro acesso confirma o controle do e-mail pelo OTP, sem habilitar o módulo Devise `:confirmable`. Trata-se de verificação de login; não há um novo fluxo de link de ativação da conta.
 
 ## Dispositivos e OTP
 
@@ -134,11 +136,11 @@ O primeiro acesso sem OTP é uma decisão deste produto: ele comprova a senha e 
 
 `getOrCreateDeviceToken()` gera 32 bytes com `crypto.getRandomValues`, representados por 64 caracteres hexadecimais. A chave local é `easyslotting_device_token`. As telas de login enviam esse valor em `device_token`; a API também aceita `X-Device-Token`, com preferência pelo header.
 
-O identificador não é uma senha nem concede acesso sozinho. O servidor aceita de 8 a 64 caracteres alfanuméricos, `_` ou `-` e armazena `device:<SHA256 do identificador>`, nunca seu valor puro, na lista `trusted_ips`. Essa lista contém IPs e hashes de dispositivos, com máximo de 30 entradas combinadas, não 30 aparelhos.
+O identificador não é uma senha nem concede acesso sozinho. O servidor aceita de 8 a 64 caracteres alfanuméricos, `_` ou `-`. Ele vincula uma tentativa ao desafio OTP e permite substituir a sessão staff do mesmo navegador sem ocupar outra vaga. Não é gravado como dispositivo confiável em `trusted_ips` nem dispensa OTP em IP novo.
 
-O código atual exige que o IP esteja na lista **e** que o hash do dispositivo esteja na lista. A lista não modela pares exclusivos de IP/dispositivo. Para um histórico por aparelho, com expiração e revogação individual de confiança, será necessária uma estrutura própria de dispositivos.
+`trusted_ips` mantém até 30 IPs válidos e normalizados por conta. Entradas legadas `device:<hash>` são ignoradas na leitura e removidas ao registrar o próximo login concluído. `login_otp_required?` exige código no primeiro acesso ou quando o IP não está na lista. Não há migration nem reset para essa alteração.
 
-O IP vem de `request.remote_ip`. A configuração de proxy precisa preservar o endereço observado corretamente. Compartilhar o Wi-Fi não torna outro aparelho confiável. Não existe exceção de autenticação para IP privado/LAN. Auditoria e geolocalização não são fontes de autorização.
+O IP vem de `request.remote_ip`, nunca de um campo do payload. A configuração de proxy precisa preservar o endereço observado e confiar somente nos proxies corretos. Aparelhos na mesma rede podem compartilhar o IP público: depois da confirmação desse IP, outro aparelho nessa rede não gera novo desafio. Essa é a política escolhida para o produto; ela reconhece redes, não aparelhos. Não existe exceção para IP privado/LAN. Auditoria e geolocalização não são fontes de autorização.
 
 ### Desafio por e-mail
 
@@ -149,7 +151,7 @@ sequenceDiagram
   participant B as PostgreSQL
   participant M as Worker / e-mail
   V->>R: E-mail + senha + device_token
-  R->>B: Verifica conta, senha e confiança
+  R->>B: Verifica conta/senha e primeiro acesso ou IP novo
   R->>B: Persiste HMAC do OTP e prazo
   R->>M: Enfileira envio do código
   R-->>V: 200 requires_verification, sem credencial
@@ -172,7 +174,7 @@ sequenceDiagram
 
 Reenviar o login sem `otp_code` durante o cooldown devolve o desafio existente sem disparar outro e-mail. Após o intervalo, a geração de um novo código substitui o anterior e inicia o contador do novo desafio. O código deve ser enviado com o mesmo IP e identificador usados ao pedir o desafio; mudança de rede no meio do fluxo pode invalidá-lo.
 
-O estado `requires_verification: true` com HTTP 200 significa **desafio pendente**, não login concluído. A tela só salva a sessão depois de receber credenciais. O método `totp` anunciado na resposta staff está inativo (`active: false`, “Em breve”); aplicativo autenticador ainda não está implementado.
+O estado `requires_verification: true` com HTTP 200 significa **desafio pendente**, não login concluído. A tela só salva a sessão depois de receber credenciais. API e modal oferecem somente e-mail; aplicativo autenticador não está implementado nem é anunciado como “Em breve”. O assunto do e-mail é genérico, e o código aparece no corpo. A tela libera nova tentativa após erro e impede envio duplicado enquanto aguarda a resposta.
 
 ### Bloqueio e rate limiting
 
@@ -262,7 +264,7 @@ Os helpers capturam credenciais e slug, limpam imediatamente o estado local e fa
 
 Logout de cliente aceita Bearer válido daquela conta/estabelecimento ou refresh em cookie acompanhado de CSRF válido. Cookies de autenticação são removidos no path original; há limpeza adicional do antigo cookie CSRF no path `/`. O helper usa `customer-slug` da sessão, não o slug da página pública visitada.
 
-Logout não apaga a confiança do dispositivo: sair encerra a sessão, sem obrigar OTP no próximo acesso de IP/dispositivo conhecidos. “Esquecer dispositivo” será uma funcionalidade diferente de revogar tokens.
+Logout não apaga os IPs reconhecidos: sair encerra a sessão, sem obrigar OTP no próximo login pelo mesmo IP. “Esquecer IP” será uma funcionalidade diferente de revogar tokens. F5 recupera uma sessão existente válida, sem novo login ou desafio OTP; não registra o IP como reconhecido.
 
 Sem rede, a limpeza local continua funcionando, mas a revogação remota só pode ser garantida quando a API recebe a requisição. Não trate um erro de rede como confirmação de revogação no servidor.
 
@@ -279,6 +281,8 @@ A senha não passa por `strip`, conversão de caixa ou sanitização HTML no bac
 - Payload: `current_password`, `password`, `password_confirmation`.
 - O servidor confere a senha atual, confirmação e regras do model. A persistência normal aciona a invalidação das credenciais.
 - Após sucesso, as telas limpam a sessão e encaminham para novo login.
+
+O modal obrigatório do painel admin oferece **Sair da conta** também no primeiro acesso do funcionário e na expiração de senha. A ação reutiliza `logoutStaff`, limpa os campos de senha e a sobreposição do modal e volta à home. Sair não marca a senha como alterada: a obrigação permanece no próximo login. Saída e salvamento não são iniciados simultaneamente pela tela. Se a rede falhar, a sessão local é limpa; a revogação no servidor depende de a API receber a requisição.
 
 O produto usa política de expiração em 90 dias a partir de `password_changed_at`. Em geral, GET é permitido com `X-Password-Expired: true`; escrita é bloqueada com 403, `code: 'PASSWORD_EXPIRED'` e `password_expired: true`. Controllers de autenticação e `account/users` são exceções; `customer/profile` também é liberado para permitir manutenção da conta. Não é uma liberação automática para qualquer futura rota de escrita.
 
@@ -321,7 +325,7 @@ Resposta de desafio, sem tokens:
 }
 ```
 
-Staff pode incluir também o método TOTP inativo. Sucesso staff: `{"data": {"id": 1, "role": "owner", "password_expired": false}, "staff_csrf_token": "<csrf>"}` mais headers de autenticação e cookie de recuperação; outros campos seguros do usuário podem acompanhar `data`.
+O único método anunciado é e-mail. Sucesso staff: `{"data": {"id": 1, "role": "owner", "password_expired": false}, "staff_csrf_token": "<csrf>"}` mais headers de autenticação e cookie de recuperação; outros campos seguros do usuário podem acompanhar `data`.
 
 Sucesso cliente:
 
@@ -377,7 +381,7 @@ A montagem Devise também gera rotas da gem. Consulte `config/routes.rb` e `bund
 | 422 | Entrada/formato/validação inválidos |
 | 429 | Throttle ou bloqueio de conta staff |
 
-Login exige e-mail string de até 254 bytes com formato válido, senha string de 1–128 bytes, OTP ausente ou string com seis dígitos, dispositivo ausente ou string com formato válido. Arrays/objetos no lugar desses campos retornam 422. Enviar dispositivo é recomendado: sem identificador válido persistido, acessos seguintes não satisfazem a regra de confiança.
+Login exige e-mail string de até 254 bytes com formato válido, senha string de 1–128 bytes, OTP ausente ou string com seis dígitos, dispositivo ausente ou string com formato válido. Arrays/objetos no lugar desses campos retornam 422. O identificador deve permanecer o mesmo ao pedir e confirmar um desafio; ele também permite substituir a sessão staff do mesmo navegador. Não participa da lista de IPs reconhecidos.
 
 Nas chamadas públicas reconhecidas pelas telas atuais, `api.ts` não anexa credenciais antigas a login, cadastro, onboarding ou recuperação/redefinição. Nas novas telas, use caminhos relativos a essa instância (`/customer/profile`, por exemplo); os interceptors classificam as rotas por prefixo/sufixo. Um endpoint novo fora dessa convenção precisa de classificação explícita e testes. O alias backend `/register`, por exemplo, não consta atualmente de `isPublicAuth`; se uma nova tela passar a usá-lo, ajuste essa classificação e teste a ausência de credenciais antigas.
 
@@ -386,7 +390,7 @@ Nas chamadas públicas reconhecidas pelas telas atuais, `api.ts` não anexa cred
 | Campo | Onde | Significado |
 | --- | --- | --- |
 | `first_login_at` | User e Customer | Primeiro login concluído, distinto da criação da conta |
-| `trusted_ips` | Ambos, JSONB | Lista limitada de IPs e hashes de dispositivos conhecidos |
+| `trusted_ips` | Ambos, JSONB | Até 30 IPs válidos normalizados; hashes legados de dispositivo são ignorados e limpos no próximo login concluído |
 | `failed_attempts`, `locked_at` | Ambos | Erros de senha e bloqueio temporário |
 | `login_otp_code` | Ambos | HMAC do desafio, apesar do nome legado “code” |
 | `login_otp_sent_at`, `login_otp_attempts` | Ambos | Prazo/cooldown e erros do OTP |
@@ -476,7 +480,7 @@ As skills locais `easyslotting-authentication`, `easyslotting-secure-feature` e 
 | --- | --- |
 | Outro método de verificação, como TOTP | Model/armazenamento de segredo e recuperação, verificação server-side, limites, desafio API, UI e testes; marcar `active: true` sozinho não implementa o método |
 | Sessões simultâneas independentes para cliente | Tabela de sessões por conta/aparelho; `sid`, hash/prazo por sessão; resolver JWT, refresh, logout, revogação e troca de senha; substituir estado único em `Customer` |
-| “Esquecer aparelho” | Registro/revogação de confiança, distinto da sessão; exigir nova verificação nos próximos logins sem alterar `first_login_at` para simular primeira conta |
+| “Esquecer IP reconhecido” | Revogação de confiança da rede, distinta da sessão; exigir nova verificação no próximo login desse IP sem alterar `first_login_at` |
 | Persistência staff além da aba atual | A recuperação por F5 já existe; login em aba nova/lembrar dispositivo exige desenho adicional para bootstrap CSRF/identidade, cookies compartilhados e prazos |
 | Prazo de sessão diferente | Configuração JWT/Devise, encoder, cookies, resposta e expiração local; testes de limite temporal |
 | Novo endpoint público de autenticação | `LoginInput` quando aplicável, rate limiting, classificação de `api.ts`, cache, filtragem e exceções de senha; impedir credenciais antigas na chamada |
@@ -525,7 +529,7 @@ Para revisão estática, a partir de `backend`: `bundle exec brakeman --no-pager
 
 Frontend, backend e migration precisam ser publicados juntos. No Compose de staging, `prepare` executa `rails db:prepare` e deve terminar com código 0 antes de `web`/`worker`. O [workflow de staging](../.github/workflows/deploy-staging.yml) chama [scripts/deploy-staging.sh](../scripts/deploy-staging.sh) quando há push em `staging`, usando o runner configurado na VM. Salvar ou commitar localmente não inicia esse deploy.
 
-JWTs anteriores de cliente não têm o novo `sid` e usam o emissor antigo, portanto exigem novo login. A migration descarta OTP pendente antigo; hashes novos de dispositivo podem exigir nova verificação para contas existentes. Ela não remove contas ou estabelecimentos. Faça backup antes de mudanças de schema; rollback não restaura códigos descartados nem torna as credenciais antigas válidas automaticamente. Reverter exige compatibilizar código, schema e política de sessões.
+JWTs anteriores à adoção de `customer_sessions` não têm o novo `sid` e usam o emissor antigo, portanto exigem novo login. A migration de endurecimento descarta OTP pendente antigo e não remove contas ou estabelecimentos. A regra de primeiro login/IP de 10/10 não exige migration: contas com primeiro acesso concluído mantêm seus IPs válidos reconhecidos. Faça backup antes de mudanças de schema; rollback não restaura códigos descartados nem torna as credenciais antigas válidas automaticamente. Reverter exige compatibilizar código, schema e política de sessões.
 
 Depois do deploy, verifique primeiro login, OTP, refresh, logout, senha alterada, isolamento e a [matriz por perfil](session-policy.md). Testes de aparelhos diferentes continuam sujeitos a limites por IP; clientes preservam os outros acessos. Não reinicie a VM como substituto de conferir o job/deploy e os logs.
 
@@ -563,7 +567,7 @@ O nome do serviço Rails é `web`. Não publique saída contendo dados pessoais,
 - O checkbox de lembrar não habilita persistência adicional; staff recupera a mesma sessão após F5 e cliente depende do estado de `sessionStorage`. Nova aba sem metadados/CSRF não é login automático.
 - Identificador de dispositivo é um sinal armazenado no navegador, não atestado físico. XSS pode acessar storage/memória; HttpOnly protege a leitura do refresh, não elimina a necessidade de prevenir XSS.
 - Confiança atual usa uma lista limitada, sem tabela de aparelhos, expiração por aparelho ou botão dedicado de “esquecer”.
-- TOTP, passkeys e recuperação de segundo fator não estão implementados; primeiro login não exige prova de controle do e-mail.
+- Primeiro login exige código por e-mail. TOTP, passkeys e recuperação de segundo fator não estão implementados. E-mail OTP não é resistente a phishing; IP reconhecido não comprova a identidade de um aparelho, e aparelhos na mesma rede podem dispensar novo desafio.
 - Logout offline não garante revogação remota; retenção de auditoria precisa de agendamento operacional.
 - Política de senha/prazos tem pontos duplicados e a diferença para timestamp ausente descrita acima.
 - Testes automatizados cobrem regressões do código; validação ponta a ponta na VM, entrega real de e-mail e operação contínua precisam ser conferidas no ambiente publicado.

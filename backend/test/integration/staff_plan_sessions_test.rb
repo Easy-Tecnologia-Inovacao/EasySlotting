@@ -78,7 +78,7 @@ class StaffPlanSessionsTest < ActionDispatch::IntegrationTest
 
   test 'employee quota rejection is 409 and ignores client supplied benefits' do
     device = 'a' * 64
-    @employee.add_trusted_device!(ip: '127.0.0.1', device_token: device)
+    @employee.add_trusted_ip!(ip: '127.0.0.1')
     2.times { @employee.create_new_auth_token }
     post '/api/devise_users/sign_in', params: { email: @employee.email, password: PASSWORD, device_token: device,
       max_owner_sessions: 99, owner_id: @owner.id, role: 'super_admin' }, as: :json
@@ -104,7 +104,7 @@ class StaffPlanSessionsTest < ActionDispatch::IntegrationTest
   test 'single super admin allows exactly five sessions and never silently evicts one' do
     admin = User.create!(name: 'Administrador', email: "single-admin-#{SecureRandom.hex(5)}@example.test", password: PASSWORD, role: 'super_admin')
     device = 'b' * 64
-    admin.add_trusted_device!(ip: '127.0.0.1', device_token: device)
+    admin.add_trusted_ip!(ip: '127.0.0.1')
     headers = 5.times.map { admin.create_new_auth_token }
     post '/api/devise_users/sign_in', params: { email: admin.email, password: PASSWORD, device_token: device }, as: :json
     assert_response :conflict

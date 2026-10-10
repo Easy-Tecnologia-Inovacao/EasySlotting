@@ -4,6 +4,8 @@ Data: 09/10/2026. Escopo: autenticação de proprietários, funcionários, super
 
 Para arquitetura, contratos, operação e instruções de extensão, consulte o [guia técnico de autenticação](authentication.md). Este relatório preserva os achados e a validação da revisão.
 
+**Atualização de política em 10/10/2026:** a [verificação por e-mail](email-login-verification.md) passa a exigir OTP no primeiro login dos quatro perfis e usa somente o IP observado para dispensar desafios posteriores, por decisão do produto. Os trechos históricos abaixo sobre primeiro login sem OTP e confiança por IP/dispositivo descrevem a versão anterior. Aparelhos no mesmo IP podem dispensar o desafio; o identificador do navegador continua vinculado ao código pendente e às sessões, sem ser salvo como confiança.
+
 A correção de 10/10/2026 para manter a sessão staff após F5 está em
 [recuperação segura de sessão](staff-session-recovery.md), com contrato,
 revisão de autorização/IDOR/CSRF e evidência dos testes específicos.

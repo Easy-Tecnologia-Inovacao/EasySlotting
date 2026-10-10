@@ -2,6 +2,8 @@
 
 Implementação de 09/10/2026. Complementa [autenticação](authentication.md), [planos/sessões](owner-sessions.md) e [exclusão de contas](account-deletion.md).
 
+A [verificação por e-mail de 10/10/2026](email-login-verification.md) é comum aos quatro perfis: primeiro login e IP desconhecido exigem código. O IP reconhecido dispensa somente o desafio, sem mudar quotas, permissões ou revogação de sessões.
+
 ## Regras comerciais
 
 | Perfil | Sessões simultâneas por conta | Origem do benefício |

@@ -1,6 +1,8 @@
 require 'test_helper'
+require_relative '../support/email_login_test_helper'
 
 class AuthenticationSessionsTest < ActionDispatch::IntegrationTest
+  include EmailLoginTestHelper
   parallelize(workers: 1)
   PASSWORD = 'TesteSeguro#2026'.freeze
   DEVICE = 'a' * 64
@@ -26,17 +28,26 @@ class AuthenticationSessionsTest < ActionDispatch::IntegrationTest
     Rack::Attack.enabled = @previous_attack
   end
 
-  test 'staff first login works and a new device on the same IP requires OTP without auth headers' do
+  test 'staff first login requires OTP and only a new IP challenges subsequent logins' do
+    post '/api/devise_users/sign_in', params: login_payload(@owner), as: :json
+    assert response.parsed_body['requires_verification']
+    assert response.headers['access-token'].blank?
+    assert @owner.reload.tokens.empty?
+    assert_nil @owner.first_login_at
+    travel 61.seconds
     staff_login
     assert_response :success
     assert response.headers['access-token'].present?
     assert @owner.reload.first_login_at.present?
-    assert_not_includes @owner.trusted_ips, "device:#{DEVICE}"
+    assert_equal ['127.0.0.1'], @owner.trusted_ips
     staff_login(device: OTHER_DEVICE)
     assert_response :success
+    assert response.headers['access-token'].present?
+    post '/api/devise_users/sign_in', params: login_payload(@owner),
+      headers: { 'REMOTE_ADDR' => '192.168.1.99' }, as: :json
     assert response.parsed_body['requires_verification']
     assert response.headers['access-token'].blank?
-    assert_equal 1, @owner.reload.tokens.size
+    assert_equal 2, @owner.reload.tokens.size
   end
 
   test 'staff logout revokes the token and is idempotent' do
@@ -53,10 +64,12 @@ class AuthenticationSessionsTest < ActionDispatch::IntegrationTest
 
   test 'staff OTP completes authentication only for the challenged device' do
     staff_login
-    staff_login(device: OTHER_DEVICE)
+    post '/api/devise_users/sign_in', params: login_payload(@owner, device: OTHER_DEVICE),
+      headers: { 'REMOTE_ADDR' => '192.168.1.99' }, as: :json
     travel 61.seconds
-    code = @owner.reload.generate_login_otp!(ip: '127.0.0.1', device_token: OTHER_DEVICE)
-    post '/api/devise_users/sign_in', params: login_payload(@owner, device: OTHER_DEVICE).merge(otp_code: code), as: :json
+    code = @owner.reload.generate_login_otp!(ip: '192.168.1.99', device_token: OTHER_DEVICE)
+    post '/api/devise_users/sign_in', params: login_payload(@owner, device: OTHER_DEVICE).merge(otp_code: code),
+      headers: { 'REMOTE_ADDR' => '192.168.1.99' }, as: :json
     assert_response :success
     assert response.headers['access-token'].present?
     assert_nil @owner.reload.login_otp_code
@@ -96,13 +109,17 @@ class AuthenticationSessionsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test 'customer first login works and device or IP changes require OTP' do
+  test 'customer first login requires OTP and a new browser on a known IP does not' do
+    post @login, params: login_payload(@customer), as: :json
+    assert response.parsed_body['requires_verification']
+    assert_not response.parsed_body.key?('access_token')
+    assert_nil @customer.reload.first_login_at
+    travel 61.seconds
     customer_login
     assert_response :success
     assert response.parsed_body['access_token'].present?
     customer_login(device: OTHER_DEVICE)
-    assert response.parsed_body['requires_verification']
-    assert_not response.parsed_body.key?('access_token')
+    assert response.parsed_body['access_token'].present?
     post @login, params: login_payload(@customer), headers: { 'REMOTE_ADDR' => '192.168.1.99' }, as: :json
     assert response.parsed_body['requires_verification']
   end
@@ -119,13 +136,16 @@ class AuthenticationSessionsTest < ActionDispatch::IntegrationTest
 
   test 'customer OTP completes authentication and is single-use' do
     customer_login
-    customer_login(device: OTHER_DEVICE)
+    post @login, params: login_payload(@customer, device: OTHER_DEVICE),
+      headers: { 'REMOTE_ADDR' => '192.168.1.99' }, as: :json
     travel 61.seconds
-    code = @customer.reload.generate_login_otp!(ip: '127.0.0.1', device_token: OTHER_DEVICE)
-    post @login, params: login_payload(@customer, device: OTHER_DEVICE).merge(otp_code: code), as: :json
+    code = @customer.reload.generate_login_otp!(ip: '192.168.1.99', device_token: OTHER_DEVICE)
+    post @login, params: login_payload(@customer, device: OTHER_DEVICE).merge(otp_code: code),
+      headers: { 'REMOTE_ADDR' => '192.168.1.99' }, as: :json
     assert_response :success
     assert response.parsed_body['access_token'].present?
-    post @login, params: login_payload(@customer, device: OTHER_DEVICE).merge(otp_code: code), as: :json
+    post @login, params: login_payload(@customer, device: OTHER_DEVICE).merge(otp_code: code),
+      headers: { 'REMOTE_ADDR' => '192.168.1.99' }, as: :json
     assert_response :unauthorized
   end
 
@@ -344,10 +364,10 @@ class AuthenticationSessionsTest < ActionDispatch::IntegrationTest
   end
 
   def staff_login(device: DEVICE)
-    post '/api/devise_users/sign_in', params: login_payload(@owner, device: device), as: :json
+    login_with_email_verification('/api/devise_users/sign_in', params: login_payload(@owner, device: device))
   end
 
   def customer_login(device: DEVICE, password: PASSWORD)
-    post @login, params: login_payload(@customer, device: device, password: password), as: :json
+    login_with_email_verification(@login, params: login_payload(@customer, device: device, password: password))
   end
 end

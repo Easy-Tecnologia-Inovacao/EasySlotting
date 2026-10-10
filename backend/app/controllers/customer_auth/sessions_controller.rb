@@ -79,7 +79,7 @@ class CustomerAuth::SessionsController < ApplicationController
       unless customer.verify_login_otp(raw_otp, ip: request.remote_ip, device_token: device_token)
         return render json: { error: 'Código de verificação inválido ou expirado.' }, status: :unauthorized
       end
-    elsif !customer.first_successful_login? && !customer.trusted_device?(ip: request.remote_ip, device_token: device_token)
+    elsif customer.login_otp_required?(ip: request.remote_ip)
       code = customer.generate_login_otp!(ip: request.remote_ip, device_token: device_token)
       if code
         SecurityAlertMailer.login_verification_code(
@@ -95,7 +95,7 @@ class CustomerAuth::SessionsController < ApplicationController
       unless customer.active? && customer.authenticate(params[:password])
         raise CustomerAuthenticatable::TokenInvalidError
       end
-      customer.add_trusted_device!(ip: request.remote_ip, device_token: device_token)
+      customer.add_trusted_ip!(ip: request.remote_ip)
       customer.customer_sessions.where('expires_at <= ?', Time.current).delete_all
       session = customer.customer_sessions.build(session_id: SecureRandom.uuid,
         expires_at: CustomerJwt::REFRESH_TOKEN_EXPIRATION.seconds.from_now)
