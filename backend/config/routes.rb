@@ -18,6 +18,7 @@ Rails.application.routes.draw do
     end
 
     post '/owner_onboarding', to: 'account/onboarding#create'
+    post '/devise_users/restore_session', to: 'devise_users/session_recovery#create'
 
     # =========================
     # AUTH DE CUSTOMERS (por estabelecimento)

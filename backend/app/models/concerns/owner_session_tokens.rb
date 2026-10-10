@@ -8,7 +8,8 @@ module OwnerSessionTokens
     with_lock do
       policy = OwnerSessionPolicy.new(self)
       policy.prepare!(client: client, device_digest: extras[:device_digest])
-      previous = (tokens[client] || {}).slice(*OwnerSessionPolicy::METADATA_KEYS)
+      previous = (tokens[client] || {}).slice(*OwnerSessionPolicy::METADATA_KEYS,
+                                            'recovery_digest', 'recovery_csrf_digest')
       metadata = previous.merge('issued_at' => previous['issued_at'] || Time.current.to_f,
                                 'last_seen_at' => Time.current.to_i)
       token = super(client: client, lifespan: lifespan, cost: cost, **extras.merge(metadata))

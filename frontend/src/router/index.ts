@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { isCustomerLoggedIn, getCustomerSlug } from '@/services/customerAuth'
 import { getStaffAccessToken } from '@/services/staffAuth'
+import { restoreStaffSession } from '@/services/api'
 
 // MAIN SISTEMA (LANDING)
 import LandingPage from '@/views/landing/LandingPage/LandingPage.vue'
@@ -279,12 +280,17 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   if (to.params.slug) {
     localStorage.setItem('site-slug', String(to.params.slug))
     sessionStorage.setItem('site-slug', String(to.params.slug))
   }
 
+  // A home também precisa da sessão validada antes de renderizar seus botões.
+  if (!getStaffAccessToken() && (to.path === '/' || to.path.startsWith('/admin') ||
+      to.path.startsWith('/super-admin') || to.path === '/sistema/login')) {
+    try { await restoreStaffSession() } catch { /* A rota protegida continua fechada. */ }
+  }
   const token = getStaffAccessToken()
 
   const rawUser =

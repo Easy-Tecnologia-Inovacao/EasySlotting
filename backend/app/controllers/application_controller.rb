@@ -240,6 +240,7 @@ class ApplicationController < ActionController::API
   # (autenticação, troca de senha, recuperação de senha)
   AUTH_CONTROLLERS = %w[
     devise_users/sessions
+    devise_users/session_recovery
     devise_users/passwords
     devise_users/confirmations
     customer_auth/sessions

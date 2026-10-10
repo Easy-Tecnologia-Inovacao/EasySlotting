@@ -33,6 +33,10 @@ class Rack::Attack
   end
 
   # 3. Proteção de Login de Cliente (JWT Custom) por IP
+  throttle('staff_recovery/ip', limit: 20, period: 1.minute) do |req|
+    req.ip if req.path == '/api/devise_users/restore_session' && req.post?
+  end
+
   throttle('logins/customer/ip', limit: 5, period: 1.minute) do |req|
     if req.path.include?('/customer_auth/') && req.path.include?('/sign_in') && req.post?
       req.ip

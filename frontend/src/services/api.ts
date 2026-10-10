@@ -4,15 +4,15 @@ import {
   clearCustomerSession, updateAccessToken, isTokenExpiringSoon
 } from '@/services/customerAuth'
 import {
-  clearStaffAccessToken, getStaffAccessToken, getStaffSessionVersion, setStaffAccessToken
+  clearStaffAccessToken, getStaffAccessToken, getStaffSessionVersion, setStaffAccessToken,
+  getStaffCsrfToken, saveStaffSession
 } from '@/services/staffAuth'
 import { DEVICE_TOKEN_STORAGE_KEY } from '@/services/storageKeys'
 
-const host = window.location.hostname
-const isLocal = ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(host)
-const defaultURL = import.meta.env.PROD ? '/api'
-  : isLocal ? 'http://localhost:3000/api' : window.location.protocol + '//' + host + ':3000/api'
-const baseURL = import.meta.env.VITE_API_URL || defaultURL
+// Em desenvolvimento o proxy Vite mantém página/API na mesma origem, inclusive
+// ao abrir por IP LAN. Um VITE_API_URL legado com localhost não pode transformar
+// o cookie SameSite=Strict em cookie de terceiro e quebrar a recuperação por F5.
+const baseURL = import.meta.env.PROD ? (import.meta.env.VITE_API_URL || '/api') : '/api'
 export const api = axios.create({
   baseURL, headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, withCredentials: true
 })
@@ -39,6 +39,45 @@ export const getOrCreateDeviceToken = (): string => {
 }
 
 let refreshPromise: Promise<string> | null = null
+let staffRestorePromise: Promise<boolean> | null = null
+let staffRestoreVersion = -1
+
+/** Recupera apenas a mesma identidade/aba, validada no servidor antes da rota. */
+export function restoreStaffSession(): Promise<boolean> {
+  if (getStaffAccessToken()) return Promise.resolve(true)
+  const version = getStaffSessionVersion()
+  if (staffRestorePromise && staffRestoreVersion === version) return staffRestorePromise
+  const csrf = getStaffCsrfToken()
+  const client = sessionStorage.getItem('client')
+  const uid = sessionStorage.getItem('uid')
+  if (!csrf || !client || !uid) return Promise.resolve(false)
+  staffRestoreVersion = version
+  const pending = axios.post(baseURL + '/devise_users/restore_session', {}, {
+    headers: { 'X-CSRF-Token': csrf, 'X-Staff-Client': client, 'X-Staff-Uid': uid },
+    withCredentials: true
+  }).then((response) => {
+    if (version !== getStaffSessionVersion()) throw new axios.CanceledError('Sessão encerrada')
+    const token = String(response.headers['access-token'] || '').trim()
+    const user = response.data?.data
+    if (!token || response.headers['client'] !== client || response.headers['uid'] !== uid ||
+        !user || !['owner', 'employee', 'super_admin'].includes(user.role)) {
+      clearStaffAccessToken()
+      return false
+    }
+    saveStaffSession(token, client, uid, user, csrf)
+    return true
+  }).catch((error) => {
+    if (version === getStaffSessionVersion() && axios.isAxiosError(error) &&
+        [401, 403].includes(error.response?.status || 0)) clearStaffAccessToken()
+    // Erros de rede não removem as referências necessárias para tentar novamente.
+    throw error
+  })
+  staffRestorePromise = pending
+  const release = () => { if (staffRestorePromise === pending) staffRestorePromise = null }
+  pending.then(release, release)
+  return pending
+}
+
 let refreshVersion = -1
 function refreshAccessToken(): Promise<string> {
   const version = getCustomerSessionVersion()
@@ -149,7 +188,7 @@ api.interceptors.response.use((response) => {
 export async function logoutStaff(): Promise<void> {
   const headers = {
     'access-token': getStaffAccessToken() || '', client: sessionStorage.getItem('client') || '',
-    uid: sessionStorage.getItem('uid') || ''
+    uid: sessionStorage.getItem('uid') || '', 'X-CSRF-Token': getStaffCsrfToken() || ''
   }
   clearStaffAccessToken()
   await axios.delete(baseURL + '/devise_users/sign_out', { headers, withCredentials: true })

@@ -42,7 +42,7 @@ Existem dois mecanismos de autenticação independentes. Uma credencial de clien
 | Validação pelo servidor | Conta ativa, token, role e permissões aplicáveis | Assinatura/claims, conta e estabelecimento ativos, sessão vigente |
 | Duração | Token com prazo de 2 horas, renovado pela rotação | Access token de 15 minutos; refresh de 7 dias |
 | Sessões por conta | Owner/employee: 1 a 4 pelo plano do proprietário, quota independente por pessoa (fallback 1); super admin único: até 5 | Sem teto comercial de aparelhos, com sessões independentes |
-| Estado no navegador | Access token em memória; metadados em `sessionStorage` | Access token, CSRF e perfil mínimo em `sessionStorage`; refresh em cookie HttpOnly |
+| Estado no navegador | Access token em memória; metadados/CSRF em `sessionStorage`; recuperação em cookie criptografado HttpOnly | Access token, CSRF e perfil mínimo em `sessionStorage`; refresh em cookie HttpOnly |
 
 Os tokens da equipe são tokens opacos gerenciados pelo Devise Token Auth, não JWTs. Os JWTs de cliente incluem estado de sessão consultado no banco, portanto não são aceitos apenas por terem assinatura válida.
 
@@ -193,13 +193,13 @@ O limitador de e-mail lê JSON de até 4096 bytes, normaliza o endereço, usa SH
 
 ## Sessão da equipe
 
-No sucesso de `POST /api/devise_users/sign_in`, o JSON contém `data` do usuário, incluindo `password_expired`. A credencial vem nos headers `access-token`, `client` e `uid`. O frontend salva o token com `setStaffAccessToken()` e os metadados em `sessionStorage`.
+No sucesso de `POST /api/devise_users/sign_in`, o JSON contém `data` do usuário, incluindo `password_expired`, e `staff_csrf_token`. A credencial vem nos headers `access-token`, `client` e `uid`. O frontend salva o token somente em memória e os metadados/CSRF em `sessionStorage` com `saveStaffSession()`.
 
 Nas chamadas protegidas, `api.ts` envia os três headers. O Devise Token Auth faz rotação, com prazo de duas horas e buffer de cinco segundos para chamadas em lote. Owner e cada employee herdam de uma a quatro vagas pelo plano do proprietário; a conta única super admin tem cinco. Emissão/rotação/revogação usam lock e preservam metadados. Ao atingir o limite, o login excedente retorna 409 sem expulsar acessos válidos. Consulte a [política por perfil](session-policy.md).
 
 O interceptor só aplica headers de rotação quando a resposta ainda pertence à sessão atual. Headers de token vazios ou só com espaços, possíveis em respostas de lote, não apagam o token válido. As operações que alteram o mapa de sessões usam lock para preservar alterações concorrentes.
 
-O access token staff permanece apenas na memória JavaScript. Um recarregamento completo da página perde esse token e exige login novamente; metadados sozinhos não recuperam a autenticação. Um novo mecanismo de persistência exige projeto próprio de sessão/refresh, em vez de simplesmente colocar o token em `localStorage`.
+O access token staff permanece apenas na memória JavaScript. Após F5, o guard aguarda `restoreStaffSession()` antes de renderizar a home ou decidir o acesso às rotas administrativas ou de login. Na home, uma sessão validada mostra “Minha conta” e “Sair”; visitantes continuam com “Entrar” e “Criar conta”. `POST /api/devise_users/restore_session` exige cookie criptografado HttpOnly, CSRF vinculado à sessão e os identificadores da mesma conta/client. O servidor verifica atividade, prazo, revogação e quota sob lock; emite outro access token para o mesmo client, sem ocupar outra vaga. Metadados sozinhos não autenticam e o cookie não autoriza automaticamente as demais APIs. Consulte o [contrato e a revisão da recuperação staff](staff-session-recovery.md).
 
 ## Sessão do cliente
 
@@ -321,7 +321,7 @@ Resposta de desafio, sem tokens:
 }
 ```
 
-Staff pode incluir também o método TOTP inativo. Sucesso staff: `{"data": {"id": 1, "role": "owner", "password_expired": false}}` mais headers de autenticação; outros campos seguros do usuário podem acompanhar `data`.
+Staff pode incluir também o método TOTP inativo. Sucesso staff: `{"data": {"id": 1, "role": "owner", "password_expired": false}, "staff_csrf_token": "<csrf>"}` mais headers de autenticação e cookie de recuperação; outros campos seguros do usuário podem acompanhar `data`.
 
 Sucesso cliente:
 
@@ -342,6 +342,7 @@ O perfil seguro pode trazer outros campos de perfil. Essa é uma ilustração do
 | Método e caminho | Uso / autenticação |
 | --- | --- |
 | `POST /devise_users/sign_in` | Login/OTP staff, público |
+| `POST /devise_users/restore_session` | Recuperação staff por cookie HttpOnly + CSRF + identidade da sessão na aba |
 | `DELETE /devise_users/sign_out` | Logout do client staff atual |
 | `POST /register` | Cadastro owner via Devise, sem sessão; consentimentos booleanos |
 | `POST /owner_onboarding` | Cadastro de owner + estabelecimento, sem sessão |
@@ -440,7 +441,7 @@ Não há valores reais de ambiente neste documento e arquivos `.env` não foram 
 | Worker Solid Queue | Executa OTP, recuperação cliente e alertas enfileirados |
 | `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` | Criação inicial explícita do super admin no runtime |
 
-O frontend usa `/api` em build de produção se `VITE_API_URL` não estiver definido. Desenvolvimento usa porta 3000 no host local/LAN. Axios envia cookies com `withCredentials: true`. A configuração atual de cookies `SameSite=Strict` favorece frontend/API no mesmo site; separar em sites distintos exige rever cookies, CORS e CSRF conjuntamente.
+O frontend usa `/api` em build de produção se `VITE_API_URL` não estiver definido. Em desenvolvimento, sempre usa `/api` na origem da página, ignorando `VITE_API_URL`; o proxy de `frontend/vite.config.ts` encaminha ao Rails em `http://127.0.0.1:3000`, preservando path, cookies, headers e IP encaminhado. Assim, abrir a página por IP LAN não envia autenticação para `localhost` no navegador. Reinicie o Vite após alterar sua configuração e faça um novo login para emitir o cookie nesse host. Axios envia cookies com `withCredentials: true`. A configuração atual de cookies `SameSite=Strict` favorece frontend/API no mesmo site; separar em sites distintos exige rever cookies, CORS e CSRF conjuntamente.
 
 Os prazos estão em mais de um ponto: `CustomerJwt`, defaults de `CustomerJsonWebToken`, `expires_in`, cookies e fallback local do Vue. Ao alterar duração, mantenha todos coerentes. Política de senha também aparece em helpers, controllers e UI. Para mudanças frequentes, centralize essas regras com testes em vez de editar um único número.
 
@@ -476,7 +477,7 @@ As skills locais `easyslotting-authentication`, `easyslotting-secure-feature` e 
 | Outro método de verificação, como TOTP | Model/armazenamento de segredo e recuperação, verificação server-side, limites, desafio API, UI e testes; marcar `active: true` sozinho não implementa o método |
 | Sessões simultâneas independentes para cliente | Tabela de sessões por conta/aparelho; `sid`, hash/prazo por sessão; resolver JWT, refresh, logout, revogação e troca de senha; substituir estado único em `Customer` |
 | “Esquecer aparelho” | Registro/revogação de confiança, distinto da sessão; exigir nova verificação nos próximos logins sem alterar `first_login_at` para simular primeira conta |
-| Persistência de login staff | Novo desenho de restauração/refresh e cookies/CSRF; preservar revogação, rotação e proteção contra respostas antigas |
+| Persistência staff além da aba atual | A recuperação por F5 já existe; login em aba nova/lembrar dispositivo exige desenho adicional para bootstrap CSRF/identidade, cookies compartilhados e prazos |
 | Prazo de sessão diferente | Configuração JWT/Devise, encoder, cookies, resposta e expiração local; testes de limite temporal |
 | Novo endpoint público de autenticação | `LoginInput` quando aplicável, rate limiting, classificação de `api.ts`, cache, filtragem e exceções de senha; impedir credenciais antigas na chamada |
 | Mudança no perfil de cliente | `updateCustomerData`, sem reiniciar sessão, prazo ou CSRF |
@@ -539,7 +540,7 @@ Depois do deploy, verifique primeiro login, OTP, refresh, logout, senha alterada
 | Retorna `requires_verification`, mas não chega e-mail | Worker, fila e entrega SMTP; em staging, procurar no Mailpit, não na caixa real |
 | CSRF retorna 403 | Cookie presente, header correspondente ao último refresh, mesmo host/path e esquema de acesso |
 | Outro aparelho perde login de cliente | Novo login não deve derrubá-lo; verificar expiração, revogação, senha/conta alterada e isolamento de `sid`, sem expor tokens nos logs |
-| Recarregar página perde login staff | Comportamento do token somente em memória |
+| Recarregar página perde login staff | Conferir novo login após publicar o fix, cookie/HTTPS, `staff-csrf-token`/client/uid e resposta de `/devise_users/restore_session`. No dev, Network deve mostrar `/api` no mesmo host/porta da página; reiniciar Vite se ainda chamar `localhost:3000` ao abrir por IP |
 | Logout parece não persistir | Usar helper centralizado; conferir DELETE na API, versão da sessão, rede e estado no banco |
 | Tela abre, mas operação retorna 403 | Permissão/tenant ativo no Rails ou política de senha; guard Vue não comprova autorização |
 | Muitos 429 em testes LAN | Limites por IP são compartilhados por aparelhos; respeitar janela/`Retry-After` |
@@ -559,7 +560,7 @@ O nome do serviço Rails é `web`. Não publique saída contendo dados pessoais,
 
 - Clientes têm sessões independentes entre aparelhos. No mesmo navegador/origem, os cookies continuam compartilhados entre abas; isso não oferece identidades simultâneas independentes em abas da mesma origem.
 - A coordenação de respostas/refresh do Vue funciona dentro da instância atual, sem sincronização global de abas.
-- O checkbox de lembrar não habilita persistência adicional; staff precisa autenticar após recarregamento completo e cliente depende do estado de `sessionStorage`.
+- O checkbox de lembrar não habilita persistência adicional; staff recupera a mesma sessão após F5 e cliente depende do estado de `sessionStorage`. Nova aba sem metadados/CSRF não é login automático.
 - Identificador de dispositivo é um sinal armazenado no navegador, não atestado físico. XSS pode acessar storage/memória; HttpOnly protege a leitura do refresh, não elimina a necessidade de prevenir XSS.
 - Confiança atual usa uma lista limitada, sem tabela de aparelhos, expiração por aparelho ou botão dedicado de “esquecer”.
 - TOTP, passkeys e recuperação de segundo fator não estão implementados; primeiro login não exige prova de controle do e-mail.

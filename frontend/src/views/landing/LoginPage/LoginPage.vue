@@ -197,7 +197,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { api, getOrCreateDeviceToken } from '@/services/api'
-import { clearStaffAccessToken, setStaffAccessToken } from '@/services/staffAuth'
+import { clearStaffAccessToken, saveStaffSession } from '@/services/staffAuth'
 import LoginVerificationModal from '@/components/LoginVerificationModal.vue'
 
 const router = useRouter()
@@ -270,16 +270,6 @@ const clearSession = () => {
   clearStaffAccessToken()
 }
 
-const saveSession = (accessToken, client, uid, user) => {
-  // Tokens de autenticação ficam somente na sessão atual.
-  const storage = sessionStorage
-  setStaffAccessToken(accessToken)
-  storage.setItem('client', client)
-  storage.setItem('uid', uid)
-  storage.setItem('user', JSON.stringify(user))
-  storage.setItem('role', user?.role || '')
-}
-
 const handleLogin = async (otpCode = null) => {
   errorMsg.value = ''
   successMsg.value = ''
@@ -347,7 +337,7 @@ const handleLogin = async (otpCode = null) => {
     failedAttempts.value = 0
     showVerificationModal.value = false
     clearSession()
-    saveSession(accessToken, client, uid, user)
+    saveStaffSession(accessToken, client, uid, user, response.data?.staff_csrf_token)
 
     successMsg.value = 'Login realizado com sucesso! Redirecionando...'
 

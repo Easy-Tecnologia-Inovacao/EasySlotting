@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 DeviseTokenAuth.setup do |config|
+  # Cookies só recuperam sessões no endpoint próprio com CSRF; não autenticam
+  # automaticamente as outras APIs pela funcionalidade nativa da gem.
+  config.cookie_enabled = false
   # Tokens são rotacionados a cada request (mais seguro)
   config.change_headers_on_each_request = true
 

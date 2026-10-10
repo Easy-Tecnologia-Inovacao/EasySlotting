@@ -6,6 +6,7 @@
 class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
   wrap_parameters false
   include LoginInput
+  include StaffRecoveryCookie
   class LoginStateChanged < StandardError; end
 
   rescue_from OwnerSessionPolicy::LimitReached do |error|
@@ -22,7 +23,7 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
     }, status: :conflict
   end
 
-  rescue_from LoginStateChanged do
+  rescue_from LoginStateChanged, StaffSessionRecovery::InvalidSession do
     @resource = nil
     @token.clear!
     render json: { errors: ['Não foi possível concluir o login. Tente novamente.'] }, status: :unauthorized
@@ -100,12 +101,28 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
   def destroy
     user = @resource
     client = @token.client
+    payload = staff_recovery_payload
+    if !user && payload
+      begin
+        user = StaffSessionRecovery.new(payload, client: request.headers['client'],
+          uid: request.headers['uid'], csrf: request.headers['X-CSRF-Token']).revoke!
+        client = payload['client']
+      rescue StaffSessionRecovery::InvalidSession
+        # Não apaga o cookie de outra identidade/aba nem restaura credenciais.
+        return render json: { success: true }, status: :ok
+      rescue StaffSessionRecovery::InvalidCsrf
+        return render json: { error: 'Não foi possível validar a saída.' }, status: :forbidden
+      end
+    end
     if user && client
       user.with_lock do
         user.tokens.delete(client)
         user.save!
       end
       AuditLogger.log_logout(user: user, ip: request.remote_ip, user_agent: request.user_agent)
+      if payload && payload['user_id'] == user.id && payload['client'] == client
+        delete_staff_recovery_cookie
+      end
     end
     @resource = nil
     @token.clear!
@@ -150,7 +167,9 @@ class DeviseUsers::SessionsController < DeviseTokenAuth::SessionsController
     is_expired = @resource.password_changed_at.nil? || @resource.password_changed_at < 90.days.ago
     user_data = user_data.merge(password_expired: is_expired)
 
-    render json: { data: user_data }
+    payload, csrf = StaffSessionRecovery.issue!(@resource, @token.client)
+    write_staff_recovery_cookie(payload)
+    render json: { data: user_data, staff_csrf_token: csrf }
   end
 
   # Sobrescreve erro de logout para retornar 200 OK (se o token já tiver sido revogado)

@@ -57,7 +57,7 @@ O seed de desenvolvimento passa a criar somente um super admin, sem e-mail pesso
 
 As migrações foram aplicadas apenas ao banco de testes local. A publicação exige backend, frontend, schema e worker atualizados juntos. O ambiente/VM não foi alterado e não houve commit/push nesta etapa. O primeiro deploy pode ser bloqueado por duplicados no catálogo ou pelos dois super admins antigos; isso exige resolução administrativa consciente. Os scripts de deploy não devem ignorar falha de migração.
 
-Esta etapa altera quotas e sessões dos clientes. **Não unifica todos os perfis em cookies HttpOnly:** equipe ainda usa Devise Token Auth em memória e clientes usam JWT/refresh. Essa padronização permanece uma evolução separada.
+Esta etapa altera quotas e sessões dos clientes. A equipe usa Devise Token Auth em memória com [recuperação por F5 via cookie HttpOnly e CSRF](staff-session-recovery.md); clientes usam JWT/refresh. Os protocolos continuam distintos, com quotas e revogação verificadas no servidor.
 
 ## Revisão de segurança do escopo
 

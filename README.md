@@ -163,7 +163,7 @@ Agendamento/
 #### Staff — Dono, Funcionários e Super Admin
 
 - Login/logout via **Devise Token Auth** (tokens no header `access-token`)
-- Token em memória, metadados em `sessionStorage` e rotação nas chamadas; recarregar completamente a página exige novo login
+- Token em memória, metadados/CSRF em `sessionStorage` e rotação nas chamadas; [recuperação segura após F5](docs/staff-session-recovery.md) via cookie criptografado HttpOnly, sem consumir outra vaga de sessão
 - Owner e cada funcionário: de 1 a 4 sessões conforme o plano do proprietário, com quotas independentes e sem somar benefícios. Super admin: uma conta no sistema, até cinco sessões. Listagem/revogação das próprias sessões no servidor
 - Recuperação e redefinição de senha por e-mail
 - Política atual de senha: **90 dias**; o Rails bloqueia escritas quando expirada, com exceções para manutenção da conta/autenticação
@@ -776,15 +776,21 @@ cd agendamento/frontend
 # Instalar dependências
 npm install
 
-# Configurar variável de ambiente
+# Copiar o exemplo de configuração (opcional no desenvolvimento)
 cp .env.example .env
-# Defina: VITE_API_URL=http://localhost:3000
+# O dev server usa /api e encaminha ao Rails em 127.0.0.1:3000.
+# VITE_API_URL configura somente o build de produção.
 
 # Iniciar dev server (acessível na rede local)
 npm run dev -- --host 0.0.0.0
 ```
 
-Acesse em `http://localhost:5173`
+Acesse em `http://localhost:5173` ou pelo IP da máquina na porta 5173.
+Em desenvolvimento, o navegador chama `/api` no mesmo endereço da página;
+o proxy Vite encaminha ao Rails na porta 3000. Isso mantém os cookies de login
+no mesmo host ao acessar por IP LAN. Uma configuração antiga de `VITE_API_URL`
+com `localhost` é ignorada pelo dev server. Após mudar `vite.config.ts`, reinicie
+`npm run dev`; faça um novo login para emitir o cookie no host usado na página.
 
 ### Outros comandos úteis
 
@@ -809,8 +815,8 @@ DEVISE_JWT_SECRET_KEY=...
 CUSTOMER_JWT_SECRET=...
 RAILS_ENV=development
 
-# Frontend (.env)
-VITE_API_URL=http://localhost:3000
+# Frontend (build de staging/produção, com proxy /api no servidor)
+VITE_API_URL=/api
 ```
 
 ---

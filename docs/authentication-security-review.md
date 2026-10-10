@@ -4,6 +4,10 @@ Data: 09/10/2026. Escopo: autenticação de proprietários, funcionários, super
 
 Para arquitetura, contratos, operação e instruções de extensão, consulte o [guia técnico de autenticação](authentication.md). Este relatório preserva os achados e a validação da revisão.
 
+A correção de 10/10/2026 para manter a sessão staff após F5 está em
+[recuperação segura de sessão](staff-session-recovery.md), com contrato,
+revisão de autorização/IDOR/CSRF e evidência dos testes específicos.
+
 A revisão complementar de cobertura por role e exclusão de contas está em [account-deletion.md](account-deletion.md), incluindo os ajustes posteriores no fluxo de clientes e pendências do endpoint staff legado.
 
 A evolução de limite simultâneo owner por plano, seus testes de concorrência e sua revisão específica estão em [owner-sessions.md](owner-sessions.md).
