@@ -12,7 +12,6 @@ module SuperAdmin
 
     def create
       plan = Plan.new(plan_params)
-      apply_promotion_rules(plan)
 
       if plan.save
         AuditLogger.log(
@@ -36,7 +35,6 @@ module SuperAdmin
 
     def update
       @plan.assign_attributes(plan_params)
-      apply_promotion_rules(@plan)
 
       if @plan.save
         AuditLogger.log(
@@ -101,29 +99,13 @@ module SuperAdmin
         :max_owner_sessions,
         :active,
         :promotional_price,
+        :promotion_mode,
         :discount_percentage,
         :promotion_active,
         :promotion_starts_at,
         :promotion_duration_days,
         :highlight
       )
-    end
-
-    def apply_promotion_rules(plan)
-      promotion_active = ActiveModel::Type::Boolean.new.cast(plan.promotion_active)
-
-      unless promotion_active
-        plan.promotional_price = nil
-        plan.discount_percentage = nil
-        plan.promotion_starts_at = nil
-        plan.promotion_ends_at = nil
-        plan.promotion_duration_days = nil
-        return
-      end
-
-      if plan.promotion_starts_at.present? && plan.promotion_duration_days.present?
-        plan.promotion_ends_at = plan.promotion_starts_at + plan.promotion_duration_days.days
-      end
     end
   end
 end

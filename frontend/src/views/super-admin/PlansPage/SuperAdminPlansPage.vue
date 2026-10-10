@@ -14,7 +14,7 @@
             </p>
           </div>
           <div class="col-12 col-xl-4 text-xl-end">
-            <button class="btn btn-primary rounded-3 fw-semibold px-4 py-2 shadow-sm" :disabled="loading || saving || deletingPlanId !== null || catalogFull" @click="openCreateModal">
+            <button class="btn btn-primary rounded-3 fw-semibold px-4 py-2 shadow-sm" :disabled="loading || !hasLoaded || saving || deletingPlanId !== null || catalogFull" @click="openCreateModal">
               <i class="bi bi-plus-lg me-2"></i>
               Novo plano
             </button>
@@ -36,7 +36,11 @@
         <p class="mt-3 text-secondary mb-0">Carregando planos...</p>
       </div>
 
-      <div v-else class="card plans-table-card">
+      <div v-else-if="!hasLoaded && errorMessage" class="alert alert-danger rounded-4" role="alert">
+        <p>{{ errorMessage }}</p>
+        <button type="button" class="btn btn-outline-danger" @click="loadPlans">Tentar novamente</button>
+      </div>
+      <div v-else-if="hasLoaded" class="card plans-table-card">
         <div class="card-body p-0">
           <div class="table-responsive">
             <table class="table align-middle mb-0">
@@ -65,7 +69,7 @@
 
                   <td>
                     <div class="fw-semibold">R$ {{ formatPrice(plan.price) }}</div>
-                    <div v-if="plan.promotional_price" class="small text-success">
+                    <div v-if="plan.promotional_price !== null && plan.promotional_price !== undefined" class="small text-success">
                       Promo: R$ {{ formatPrice(plan.promotional_price) }}
                     </div>
                   </td>
@@ -88,7 +92,7 @@
                       class="badge rounded-pill"
                       :class="plan.promotion_active ? 'text-bg-warning' : 'bg-secondary bg-opacity-25 text-secondary border border-secondary border-opacity-25'"
                     >
-                      {{ plan.promotion_active ? 'Ativa' : 'Desligada' }}
+                      {{ promotionLabel(plan) }}
                     </span>
                   </td>
 
@@ -130,7 +134,7 @@
         {{ successMessage }}
       </div>
 
-      <div v-if="errorMessage" class="alert alert-danger rounded-4 mt-4 shadow-sm" role="alert">
+      <div v-if="hasLoaded && errorMessage" class="alert alert-danger rounded-4 mt-4 shadow-sm" role="alert">
         {{ errorMessage }}
       </div>
     </div>
@@ -328,7 +332,7 @@
                   class="form-control rounded-3"
                   placeholder="Ilimitado"
                 />
-                <div class="form-text">Limite de atendimentos confirmados por mês calendário.</div>
+                <div class="form-text">Pendentes, confirmados e concluídos no mês do atendimento. Cancelados liberam vaga.</div>
               </div>
 
               <div class="col-12 col-md-6">
@@ -425,12 +429,20 @@
               </div>
               <div class="row g-3 mt-1">
 
+                <div class="col-12">
+                  <label class="form-label fw-semibold" for="promotionMode">Definir desconto por</label>
+                  <select id="promotionMode" v-model="form.promotion_mode" class="form-select rounded-3">
+                    <option value="price">Preço promocional</option>
+                    <option value="percentage">Percentual</option>
+                  </select>
+                </div>
                 <div class="col-12 col-md-4">
                   <label class="form-label fw-semibold">Preço promocional (R$)</label>
                   <div class="input-group">
                     <span class="input-group-text rounded-start-3 promo-addon fw-semibold">R$</span>
                     <input
                       v-model="form.promotional_price"
+                      :disabled="form.promotion_mode !== 'price'"
                       type="number"
                       step="0.01"
                       min="0"
@@ -449,6 +461,7 @@
                   <div class="input-group">
                     <input
                       v-model="form.discount_percentage"
+                      :disabled="form.promotion_mode !== 'percentage'"
                       type="number"
                       min="0"
                       max="100"
@@ -473,7 +486,7 @@
                   />
                   <div class="form-text">
                     <i class="bi bi-calendar-event me-1"></i>
-                    Data e hora em que o preço promocional passa a valer.
+                    Data e hora no fuso local deste navegador em que o preço promocional passa a valer.
                   </div>
                 </div>
 
@@ -548,6 +561,7 @@ import SuperAdminLayout from '@/views/super-admin/Layout/SuperAdminLayout.vue'
 
 const plans = ref([])
 const loading = ref(true)
+const hasLoaded = ref(false)
 const saving = ref(false)
 const deletingPlanId = ref(null)
 const successMessage = ref('')
@@ -569,6 +583,7 @@ const getEmptyForm = () => ({
   active: true,
   highlight: false,
   promotional_price: '',
+  promotion_mode: 'price',
   discount_percentage: '',
   promotion_active: false,
   promotion_starts_at: '',
@@ -596,16 +611,19 @@ const loadPlans = async () => {
 
   try {
     const response = await api.get('/super_admin/plans')
-    plans.value = Array.isArray(response.data) ? response.data : []
+    if (!Array.isArray(response.data)) throw new Error('Resposta inválida')
+    plans.value = response.data
+    hasLoaded.value = true
   } catch (error) {
-    errorMessage.value = error?.response?.data?.error || 'Não foi possível carregar os planos.'
+    hasLoaded.value = false
+    errorMessage.value = 'Não foi possível carregar os planos. Tente novamente.'
   } finally {
     loading.value = false
   }
 }
 
 const openCreateModal = () => {
-  if (loading.value || saving.value || deletingPlanId.value !== null || catalogFull.value) return
+  if (loading.value || !hasLoaded.value || saving.value || deletingPlanId.value !== null || catalogFull.value) return
   successMessage.value = ''
   editingPlanId.value = null
   form.value = getEmptyForm()
@@ -616,7 +634,7 @@ const openCreateModal = () => {
 }
 
 const openEditModal = (plan) => {
-  if (saving.value || deletingPlanId.value !== null) return
+  if (!hasLoaded.value || saving.value || deletingPlanId.value !== null) return
   successMessage.value = ''
   errorMessage.value = ''
   validationErrors.value = []
@@ -634,6 +652,7 @@ const openEditModal = (plan) => {
     active: !!plan.active,
     highlight: !!plan.highlight,
     promotional_price: plan.promotional_price ?? '',
+    promotion_mode: 'price',
     discount_percentage: plan.discount_percentage ?? '',
     promotion_active: !!plan.promotion_active,
     promotion_starts_at: formatDateTimeLocal(plan.promotion_starts_at),
@@ -643,7 +662,7 @@ const openEditModal = (plan) => {
 }
 
 const deletePlan = async (plan) => {
-  if (loading.value || saving.value || deletingPlanId.value !== null || showModal.value) return
+  if (loading.value || !hasLoaded.value || saving.value || deletingPlanId.value !== null || showModal.value) return
   if (!window.confirm(`Excluir o plano "${plan.name}"? Esta ação não pode ser desfeita. Planos com assinaturas vinculadas não podem ser excluídos.`)) return
 
   deletingPlanId.value = plan.id
@@ -673,51 +692,56 @@ const validateForm = () => {
   const errors = []
   const f = form.value
 
-  if (!f.name || f.name.trim().length < 2) {
-    errors.push('Nome deve ter pelo menos 2 caracteres.')
+  if (!f.name || f.name.trim().length < 2 || f.name.trim().length > 100) {
+    errors.push('Nome deve ter entre 2 e 100 caracteres.')
   }
   if (!f.code || f.code.trim().length === 0) {
     errors.push('Código é obrigatório.')
-  } else if (!/^[a-z0-9_-]+$/.test(f.code.trim())) {
+  } else if (f.code.trim().length > 50 || !/^[a-z0-9_-]+$/.test(f.code.trim())) {
     errors.push('Código deve conter apenas letras minúsculas, números, hífens e underscores.')
   }
   const price = normalizeNumber(f.price)
-  if (!price || price <= 0) {
-    errors.push('Preço deve ser maior que zero.')
+  if (!Number.isFinite(price) || price <= 0 || price >= 100000) {
+    errors.push('Preço deve ser maior que zero e menor que R$ 100.000.')
   } else if (f.active && otherActivePlans.value.some(plan =>
     isEarlierPlan(plan) ? price <= Number(plan.price) : price >= Number(plan.price)
   )) {
     errors.push('O preço normal deve crescer conforme a ordem de cadastro dos planos ativos.')
   }
   const months = normalizeInteger(f.duration_months)
-  if (!months || months <= 0 || months > 24) {
+  if (!Number.isInteger(months) || months <= 0 || months > 24) {
     errors.push('Duração deve estar entre 1 e 24 meses.')
   }
   if (f.promotion_active) {
-    if (!f.promotion_starts_at) {
-      errors.push('Data de início da promoção é obrigatória quando a promoção está ativa.')
+    const startsAt = new Date(f.promotion_starts_at)
+    if (!f.promotion_starts_at || Number.isNaN(startsAt.getTime()) || startsAt.getFullYear() < 1 || startsAt.getFullYear() > 9998) {
+      errors.push('Informe um início válido para a promoção, entre os anos 1 e 9998.')
     }
     const days = normalizeNullableInteger(f.promotion_duration_days)
-    if (!days || days <= 0 || days > 365) {
+    if (!Number.isInteger(days) || days <= 0 || days > 365) {
       errors.push('Duração da promoção deve ser entre 1 e 365 dias.')
     }
     const promoPrice = normalizeNullableNumber(f.promotional_price)
-    if (promoPrice !== null && promoPrice >= price) {
-      errors.push('Preço promocional deve ser menor que o preço normal.')
+    if (f.promotion_mode === 'price' && (promoPrice === null || !Number.isFinite(promoPrice) || promoPrice < 0 || promoPrice >= price)) {
+      errors.push('Preço promocional deve ser informado, não negativo e menor que o preço normal.')
+    }
+    const discount = normalizeNullableInteger(f.discount_percentage)
+    if (f.promotion_mode === 'percentage' && (!Number.isInteger(discount) || discount < 1 || discount > 100)) {
+      errors.push('Desconto deve ser um inteiro entre 1 e 100.')
     }
   }
 
   const maxEmp = normalizeNullableInteger(f.max_employees)
-  if (maxEmp !== null && maxEmp < 0) {
-    errors.push('Máx. funcionários não pode ser negativo.')
+  if (maxEmp !== null && (!Number.isInteger(maxEmp) || maxEmp < 0 || maxEmp > 2147483647)) {
+    errors.push('Máx. funcionários deve ser um inteiro entre 0 e 2147483647, ou ficar em branco.')
   }
   const maxServ = normalizeNullableInteger(f.max_services)
-  if (maxServ !== null && maxServ < 0) {
-    errors.push('Máx. serviços não pode ser negativo.')
+  if (maxServ !== null && (!Number.isInteger(maxServ) || maxServ < 0 || maxServ > 2147483647)) {
+    errors.push('Máx. serviços deve ser um inteiro entre 0 e 2147483647, ou ficar em branco.')
   }
   const maxApp = normalizeNullableInteger(f.max_appointments_per_month)
-  if (maxApp !== null && maxApp < 0) {
-    errors.push('Máx. agendamentos/mês não pode ser negativo.')
+  if (maxApp !== null && (!Number.isInteger(maxApp) || maxApp < 0 || maxApp > 2147483647)) {
+    errors.push('Máx. agendamentos/mês deve ser um inteiro entre 0 e 2147483647, ou ficar em branco.')
   }
 
   if (!Number.isInteger(Number(f.max_owner_sessions)) || Number(f.max_owner_sessions) < 1 || Number(f.max_owner_sessions) > 4) {
@@ -732,7 +756,7 @@ const validateForm = () => {
 }
 
 const savePlan = async () => {
-  if (saving.value || deletingPlanId.value !== null) return
+  if (loading.value || !hasLoaded.value || saving.value || deletingPlanId.value !== null) return
   errorMessage.value = ''
   validationErrors.value = []
 
@@ -757,10 +781,11 @@ const savePlan = async () => {
       max_owner_sessions: Number(form.value.max_owner_sessions),
       active: form.value.active,
       highlight: form.value.highlight,
-      promotional_price: normalizeNullableNumber(form.value.promotional_price),
-      discount_percentage: normalizeNullableInteger(form.value.discount_percentage),
+      promotion_mode: form.value.promotion_mode,
+      promotional_price: form.value.promotion_mode === 'price' ? normalizeNullableNumber(form.value.promotional_price) : null,
+      discount_percentage: form.value.promotion_mode === 'percentage' ? normalizeNullableInteger(form.value.discount_percentage) : null,
       promotion_active: form.value.promotion_active,
-      promotion_starts_at: form.value.promotion_starts_at || null,
+      promotion_starts_at: form.value.promotion_active && form.value.promotion_starts_at ? new Date(form.value.promotion_starts_at).toISOString() : null,
       promotion_duration_days: normalizeNullableInteger(form.value.promotion_duration_days)
     }
   }
@@ -794,15 +819,24 @@ const normalizeNullableNumber = (value) => {
 }
 
 const normalizeInteger = (value) => {
-  return value === '' || value === null || value === undefined ? 0 : parseInt(value, 10)
+  return value === '' || value === null || value === undefined ? 0 : Number(value)
 }
 
 const normalizeNullableInteger = (value) => {
-  return value === '' || value === null || value === undefined ? null : parseInt(value, 10)
+  return value === '' || value === null || value === undefined ? null : Number(value)
 }
 
 const formatPrice = (value) => {
   return Number(value || 0).toFixed(2).replace('.', ',')
+}
+
+const promotionLabel = (plan) => {
+  if (!plan.promotion_active) return 'Desligada'
+  const start = new Date(plan.promotion_starts_at).getTime()
+  const end = new Date(plan.promotion_ends_at).getTime()
+  if (!plan.promotion_starts_at || !plan.promotion_ends_at || !Number.isFinite(start) || !Number.isFinite(end)) return 'Configuração incompleta'
+  if (Date.now() < start) return 'Agendada'
+  return Date.now() < end ? 'Em andamento' : 'Encerrada'
 }
 
 const periodLabel = (months) => {

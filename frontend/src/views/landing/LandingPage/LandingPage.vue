@@ -228,7 +228,7 @@
 
               <div class="plan-price-block">
                 <!-- Preço riscado se houver promoção -->
-                <div v-if="plan.promotion_active && plan.promotional_price" class="mb-1">
+                <div v-if="plan.promotion_active && plan.promotional_price !== null" class="mb-1">
                   <span class="text-secondary text-decoration-line-through small me-2">
                     R$ {{ formatPrice(plan.price) }}
                   </span>

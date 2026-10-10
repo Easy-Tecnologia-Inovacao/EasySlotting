@@ -1,10 +1,12 @@
 class Plan < ApplicationRecord
+  attr_accessor :promotion_mode
   has_many :subscriptions, dependent: :restrict_with_exception
 
   before_validation :sanitize_data
   before_validation :lock_catalog_validation, prepend: true
 
   scope :in_catalog_order, -> { order(:price, :id) }
+  validates :active, :highlight, :promotion_active, inclusion: { in: [true, false] }
 
   # Campos de texto — limites de comprimento e formato
   validates :name,
@@ -46,15 +48,15 @@ class Plan < ApplicationRecord
             allow_nil: true
 
   validates :max_employees,
-            numericality: { only_integer: true, greater_than_or_equal_to: 0 },
+            numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 2_147_483_647 },
             allow_nil: true
 
   validates :max_services,
-            numericality: { only_integer: true, greater_than_or_equal_to: 0 },
+            numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 2_147_483_647 },
             allow_nil: true
 
   validates :max_appointments_per_month,
-            numericality: { only_integer: true, greater_than_or_equal_to: 0 },
+            numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 2_147_483_647 },
             allow_nil: true
 
   validates :max_owner_sessions,
@@ -70,9 +72,13 @@ class Plan < ApplicationRecord
   validate :promotional_price_must_be_less_than_regular_price
   validate :catalog_must_increase_in_creation_order
 
-  before_validation :calculate_promotion_end_date
-  before_validation :calculate_discount_percentage
-  before_validation :calculate_promotional_price
+  before_validation :normalize_promotion
+  validates :promotion_starts_at, :promotion_duration_days, :promotional_price, presence: true, if: :promotion_active?
+  validate do
+    if promotion_active? && promotion_starts_at && !promotion_starts_at.year.between?(1, 9998)
+      errors.add(:promotion_starts_at, 'deve estar entre os anos 1 e 9998')
+    end
+  end
 
   def promotion_running?
     return false unless promotion_active?
@@ -81,7 +87,7 @@ class Plan < ApplicationRecord
     promotion_starts_at.present? &&
       promotion_ends_at.present? &&
       now >= promotion_starts_at &&
-      now <= promotion_ends_at
+      now < promotion_ends_at
   end
 
   def current_price
@@ -149,21 +155,48 @@ class Plan < ApplicationRecord
     self.description = ActionView::Base.full_sanitizer.sanitize(description).to_s.strip if description.present?
   end
 
-  def calculate_promotion_end_date
-    return unless promotion_starts_at.present? && promotion_duration_days.present?
+  def normalize_promotion
+    unless promotion_active?
+      self.promotional_price = self.discount_percentage = nil
+      self.promotion_starts_at = self.promotion_ends_at = self.promotion_duration_days = nil
+      return
+    end
 
-    self.promotion_ends_at = promotion_starts_at + promotion_duration_days.days
-  end
+    # Validar limites antes da aritmética impede overflow em datas/inteiros.
+    days = promotion_duration_days_before_type_cast.to_s
+    if promotion_starts_at.present? && promotion_starts_at.year.between?(1, 9998) && days.match?(/\A\d+\z/) && days.to_i.between?(1, 365)
+      self.promotion_ends_at = promotion_starts_at + days.to_i.days
+    else
+      self.promotion_ends_at = nil
+    end
 
-  def calculate_discount_percentage
-    return unless price.present? && promotional_price.present? && price.to_f > 0
+    mode = promotion_mode.presence || (will_save_change_to_discount_percentage? && !will_save_change_to_promotional_price? ? 'percentage' : (promotional_price.nil? ? 'percentage' : 'price'))
+    unless %w[price percentage].include?(mode)
+      errors.add(:promotion_mode, 'deve ser preço ou percentual')
+      return
+    end
+    regular = BigDecimal(price_before_type_cast.to_s, exception: false)
+    return unless regular&.finite? && regular.positive? && regular < 100_000
 
-    self.discount_percentage = (((price - promotional_price) / price) * 100).round
-  end
+    if promotional_price.present? && discount_percentage.present? && will_save_change_to_promotional_price? && will_save_change_to_discount_percentage?
+      supplied_price = BigDecimal(promotional_price_before_type_cast.to_s, exception: false)
+      if supplied_price&.finite? && discount_percentage != ((regular - supplied_price) * 100 / regular).round
+        errors.add(:base, 'Informe somente a fonte escolhida do desconto; preço e percentual divergem.')
+        return
+      end
+    end
 
-  def calculate_promotional_price
-    return unless price.present? && discount_percentage.present? && promotional_price.blank?
-
-    self.promotional_price = price - (price * discount_percentage / 100.0)
+    if mode == 'percentage'
+      raw = discount_percentage_before_type_cast.to_s
+      unless raw.match?(/\A\d+\z/) && raw.to_i.between?(1, 100)
+        errors.add(:discount_percentage, 'deve ser um inteiro entre 1 e 100')
+        return
+      end
+      self.promotional_price = (regular * (100 - raw.to_i) / 100).round(2)
+    else
+      promotional = BigDecimal(promotional_price_before_type_cast.to_s, exception: false)
+      return unless promotional&.finite? && promotional >= 0 && promotional < regular
+      self.discount_percentage = ((regular - promotional) * 100 / regular).round
+    end
   end
 end
