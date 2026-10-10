@@ -13,34 +13,36 @@
       <div class="row g-3 mb-4">
         <div class="col-md-3">
           <div class="admin-card shadow-sm p-3 text-center">
-            <div class="fs-2 fw-bold text-primary">{{ summary.logins_24h || 0 }}</div>
+            <div class="fs-2 fw-bold text-primary">{{ summary.logins_24h ?? '—' }}</div>
             <div class="small text-muted fw-bold">Logins (24h)</div>
           </div>
         </div>
         <div class="col-md-3">
           <div class="admin-card shadow-sm p-3 text-center">
-            <div class="fs-2 fw-bold" :class="summary.failed_logins_24h > 0 ? 'text-danger' : 'text-success'">
-              {{ summary.failed_logins_24h || 0 }}
+            <div class="fs-2 fw-bold" :class="summary.failed_logins_24h == null ? 'text-muted' : summary.failed_logins_24h > 0 ? 'text-danger' : 'text-success'">
+              {{ summary.failed_logins_24h ?? '—' }}
             </div>
             <div class="small text-muted fw-bold">Falhas (24h)</div>
           </div>
         </div>
         <div class="col-md-3">
           <div class="admin-card shadow-sm p-3 text-center">
-            <div class="fs-2 fw-bold" :class="summary.suspicious_ip_count > 0 ? 'text-warning' : 'text-success'">
-              {{ summary.suspicious_ip_count || 0 }}
+            <div class="fs-2 fw-bold" :class="summary.suspicious_ip_count == null ? 'text-muted' : summary.suspicious_ip_count > 0 ? 'text-warning' : 'text-success'">
+              {{ summary.suspicious_ip_count ?? '—' }}
             </div>
             <div class="small text-muted fw-bold">IPs Suspeitos</div>
           </div>
         </div>
         <div class="col-md-3">
           <div class="admin-card shadow-sm p-3 text-center">
-            <div class="fs-2 fw-bold text-info">{{ totalLogs }}</div>
+            <div class="fs-2 fw-bold text-info">{{ totalLogs ?? '—' }}</div>
             <div class="small text-muted fw-bold">Total de Logs</div>
           </div>
         </div>
       </div>
 
+      <div v-if="summaryError" class="alert alert-warning" role="alert">{{ summaryError }} <button class="btn btn-sm btn-outline-primary" @click="fetchSummary">Tentar novamente</button></div>
+      <p v-if="summaryGeneratedAt" class="small text-muted">Resumo atualizado em {{ formatDate(summaryGeneratedAt) }} (cache de até 2 minutos).</p>
       <!-- Filtros -->
       <div class="admin-card shadow-sm mb-4">
         <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-3">
@@ -54,14 +56,17 @@
             <label class="form-label small fw-bold text-muted">Tipo de Ação</label>
             <select class="form-select form-select-sm" v-model="filters.action_type">
               <option value="">Todas</option>
-              <option value="login">Login</option>
-              <option value="login_failed">Login Falhou</option>
-              <option value="logout">Logout</option>
-              <option value="password_change">Mudança de Senha</option>
+              <option v-for="action in actions" :key="action.value" :value="action.value">{{ action.label }}</option>
             </select>
           </div>
           <div class="col-md-3">
             <label class="form-label small fw-bold text-muted">Estabelecimento</label>
+            <div class="input-group input-group-sm mb-2">
+              <input v-model="establishmentQuery" maxlength="100" class="form-control" aria-label="Buscar estabelecimento pelo nome" placeholder="Nome do estabelecimento" @keyup.enter="fetchEstablishments">
+              <button class="btn btn-outline-primary" :disabled="optionsLoading" @click="fetchEstablishments">Localizar</button>
+            </div>
+            <div v-if="optionsError" class="text-danger small" role="alert">{{ optionsError }} <button class="btn btn-link btn-sm" @click="fetchEstablishments">Tentar novamente</button></div>
+            <div v-if="hasMoreEstablishments" class="small text-muted">Mostrando 50 opções. Refine a busca pelo nome.</div>
             <select class="form-select form-select-sm" v-model="filters.establishment_id">
               <option value="">Todos</option>
               <option v-for="est in establishments" :key="est.id" :value="est.id">{{ est.name }}</option>
@@ -76,7 +81,7 @@
             <input type="date" class="form-control form-control-sm" v-model="filters.end_date">
           </div>
           <div class="col-md-3 d-flex align-items-end">
-            <button class="btn btn-primary btn-sm w-100 rounded-pill fw-bold" @click="fetchLogs">
+            <button class="btn btn-primary btn-sm w-100 rounded-pill fw-bold" @click="applyFilters">
               <i class="bi bi-search me-1"></i>Buscar
             </button>
           </div>
@@ -87,13 +92,14 @@
       <div class="admin-card shadow-sm">
         <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-3">
           <h5 class="fw-bold mb-0">Atividade Recente</h5>
-          <span class="badge bg-secondary">{{ totalLogs }} registros</span>
+          <span class="badge bg-secondary">{{ totalLogs ?? '—' }} registros</span>
         </div>
 
         <div v-if="loading" class="text-center py-4">
           <div class="spinner-border text-primary" role="status"></div>
         </div>
 
+        <div v-else-if="logsError" class="alert alert-danger" role="alert">{{ logsError }} <button class="btn btn-sm btn-outline-primary" @click="fetchLogs">Tentar novamente</button></div>
         <div v-else-if="logs.length === 0" class="text-center py-5">
           <i class="bi bi-shield-check fs-1 text-success opacity-50"></i>
           <p class="text-muted mt-2">Nenhum log encontrado.</p>
@@ -149,12 +155,13 @@
           </table>
         </div>
 
+        <p v-if="truncated" class="alert alert-info mt-3">Limite de páginas atingido. Refine o período ou os filtros para consultar os demais registros.</p>
         <!-- Paginação -->
-        <div v-if="totalPages > 1" class="d-flex justify-content-center mt-3 pt-3 border-top">
+        <div v-if="!loading && !logsError && totalPages > 1" class="d-flex justify-content-center mt-3 pt-3 border-top">
           <nav>
             <ul class="pagination pagination-sm mb-0">
               <li class="page-item" :class="{ disabled: currentPage === 1 }">
-                <button class="page-link" @click="goToPage(currentPage - 1)">Anterior</button>
+                <button class="page-link" :disabled="loading || currentPage === 1" @click="goToPage(currentPage - 1)">Anterior</button>
               </li>
               <li
                 v-for="page in visiblePages"
@@ -165,7 +172,7 @@
                 <button class="page-link" @click="goToPage(page)">{{ page }}</button>
               </li>
               <li class="page-item" :class="{ disabled: currentPage === totalPages }">
-                <button class="page-link" @click="goToPage(currentPage + 1)">Próxima</button>
+                <button class="page-link" :disabled="loading || currentPage === totalPages" @click="goToPage(currentPage + 1)">Próxima</button>
               </li>
             </ul>
           </nav>
@@ -176,7 +183,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import SuperAdminLayout from '@/views/super-admin/Layout/SuperAdminLayout.vue'
 import SuperAdminPageHeader from '@/components/super-admin/SuperAdminPageHeader.vue'
 import { api } from '@/services/api'
@@ -184,7 +191,7 @@ import { api } from '@/services/api'
 const loading = ref(false)
 const logs = ref([])
 const summary = ref({})
-const totalLogs = ref(0)
+const totalLogs = ref(null)
 const currentPage = ref(1)
 const totalPages = ref(1)
 const establishments = ref([])
@@ -204,59 +211,102 @@ const visiblePages = computed(() => {
   return pages
 })
 
+const logsError = ref('')
+const summaryError = ref('')
+const optionsError = ref('')
+const optionsLoading = ref(false)
+const summaryGeneratedAt = ref('')
+const establishmentQuery = ref('')
+const hasMoreEstablishments = ref(false)
+const actions = ref([])
+const truncated = ref(false)
+let alive = true, logsRequest = 0, summaryRequest = 0, optionsRequest = 0
+let appliedFilters = { ...filters.value }
+const count = value => Number.isSafeInteger(value) && value >= 0
+
 const fetchLogs = async () => {
+  const request = ++logsRequest
   loading.value = true
+  logsError.value = ''
+  logs.value = []
+  totalLogs.value = null
+  totalPages.value = 0
+  truncated.value = false
   try {
-    const params = {
-      page: currentPage.value,
-      per_page: 50,
-      ...filters.value
-    }
-
-    Object.keys(params).forEach(key => {
-      if (!params[key]) delete params[key]
-    })
-
+    const params = { page: currentPage.value, per_page: 50, ...appliedFilters }
+    Object.keys(params).forEach(key => { if (!params[key]) delete params[key] })
     const { data } = await api.get('/super_admin/audit_logs', { params })
+    if (!alive || request !== logsRequest) return
+    if (!Array.isArray(data?.logs) || !data.logs.every(log => log && count(log.id) && typeof log.action === 'string') ||
+        !count(data.pagination?.total_count) || !count(data.pagination?.total_pages)) throw new Error('invalid response')
     logs.value = data.logs
     totalLogs.value = data.pagination.total_count
     totalPages.value = data.pagination.total_pages
+    truncated.value = data.pagination.truncated === true
   } catch (error) {
-    console.error('Erro ao buscar logs:', error)
+    if (!alive || request !== logsRequest) return
+    logsError.value = error?.response?.status === 422
+      ? 'Filtros inválidos. Confira os valores e o intervalo de datas.'
+      : 'Não foi possível carregar os logs. Tente novamente.'
   } finally {
-    loading.value = false
+    if (alive && request === logsRequest) loading.value = false
   }
 }
 
 const fetchSummary = async () => {
+  const request = ++summaryRequest
+  summary.value = {}
+  summaryGeneratedAt.value = ''
+  summaryError.value = ''
   try {
     const { data } = await api.get('/super_admin/audit_logs/security_summary')
+    if (!alive || request !== summaryRequest) return
+    if (!['logins_24h', 'failed_logins_24h', 'suspicious_ip_count'].every(key => count(data?.summary?.[key])) ||
+        typeof data.generated_at !== 'string' || !Number.isFinite(Date.parse(data.generated_at))) throw new Error('invalid response')
     summary.value = data.summary
-  } catch (error) {
-    console.error('Erro ao buscar resumo:', error)
+    summaryGeneratedAt.value = data.generated_at
+  } catch {
+    if (alive && request === summaryRequest) summaryError.value = 'Resumo indisponível. Isso não significa ausência de eventos.'
   }
 }
 
 const fetchEstablishments = async () => {
+  const request = ++optionsRequest
+  optionsLoading.value = true
+  optionsError.value = ''
+  hasMoreEstablishments.value = false
   try {
-    const { data } = await api.get('/super_admin/dashboard')
-    establishments.value = data.establishments || []
-  } catch (error) {
-    console.error('Erro ao buscar estabelecimentos:', error)
+    const { data } = await api.get('/super_admin/audit_logs/filter_options', { params: { q: establishmentQuery.value } })
+    if (!alive || request !== optionsRequest) return
+    if (!Array.isArray(data?.establishments) || !data.establishments.every(item => count(item?.id) && typeof item.name === 'string') ||
+        !Array.isArray(data.actions) || !data.actions.every(item => typeof item?.value === 'string' && typeof item.label === 'string')) throw new Error('invalid response')
+    const selected = establishments.value.find(item => String(item.id) === String(filters.value.establishment_id))
+    establishments.value = data.establishments
+    if (selected && !establishments.value.some(item => item.id === selected.id)) establishments.value = [selected, ...establishments.value]
+    actions.value = data.actions
+    hasMoreEstablishments.value = data.has_more === true
+  } catch {
+    if (alive && request === optionsRequest) optionsError.value = 'Não foi possível carregar as opções de filtro.'
+  } finally {
+    if (alive && request === optionsRequest) optionsLoading.value = false
   }
 }
 
+const applyFilters = () => {
+  appliedFilters = { ...filters.value }
+  currentPage.value = 1
+  return fetchLogs()
+}
 const clearFilters = () => {
   filters.value = { action_type: '', establishment_id: '', start_date: '', end_date: '' }
-  currentPage.value = 1
-  fetchLogs()
+  return applyFilters()
 }
-
 const goToPage = (page) => {
-  if (page < 1 || page > totalPages.value) return
+  if (loading.value || page < 1 || page > totalPages.value) return
   currentPage.value = page
-  fetchLogs()
+  return fetchLogs()
 }
+onBeforeUnmount(() => { alive = false; logsRequest++; summaryRequest++; optionsRequest++ })
 
 const getActionBadge = (action) => {
   const badges = {
@@ -278,15 +328,7 @@ const getActionIcon = (action) => {
   return icons[action] || 'bi bi-circle'
 }
 
-const getActionLabel = (action) => {
-  const labels = {
-    'login': 'Login',
-    'login_failed': 'Falha',
-    'logout': 'Logout',
-    'password_change': 'Senha'
-  }
-  return labels[action] || action
-}
+const getActionLabel = action => actions.value.find(item => item.value === (action === 'password_changed' ? 'password_change' : action))?.label || action
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '—'

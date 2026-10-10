@@ -208,6 +208,7 @@ Rails.application.routes.draw do
       resources :audit_logs, only: [:index] do
         collection do
           get :security_summary
+          get :filter_options
         end
       end
     end

@@ -1,166 +1,109 @@
-# app/controllers/super_admin/audit_logs_controller.rb
-# Controller para visualização de logs de auditoria.
-# Apenas super_admin podem acessar (dados sensíveis de segurança).
-
 class SuperAdmin::AuditLogsController < ApplicationController
   before_action :authenticate_user!
   before_action :require_super_admin!
+  class InvalidFilter < StandardError; end
+  rescue_from InvalidFilter do
+    render json: { error: 'Filtros inválidos. Confira os valores e o intervalo de datas.' }, status: :unprocessable_entity
+  end
+  ACTION_LABELS = {
+    'login' => 'Login', 'login_failed' => 'Falha de login', 'logout' => 'Logout',
+    'password_change' => 'Mudança de senha', 'password_reset' => 'Redefinição de senha',
+    'password_change_failed' => 'Falha ao alterar senha', 'password_reset_request' => 'Solicitação de redefinição',
+    'write_blocked_password_expired' => 'Senha expirada', 'session_revoked' => 'Sessão encerrada',
+    'other_sessions_revoked' => 'Outras sessões encerradas', 'staff_session_limit_reached' => 'Limite de sessões'
+  }.freeze
+  MAX_PAGES = 500
 
-  SENSITIVE_DETAILS_KEYS = %w[
-    user_agent timestamp location token access_token refresh_token
-    password encrypted_password password_digest secret api_key
-  ].freeze
-
-  # Allowlist de tipos de ação aceitos como filtro (5a — validação de input)
-  ALLOWED_ACTION_TYPES = %w[
-    login login_failed logout password_change password_reset
-    write_blocked_password_expired
-  ].freeze
-
-  # GET /super_admin/audit_logs
-  # Lista logs de auditoria com filtros (todos os estabelecimentos)
   def index
+    page = integer_filter(:page, default: 1, max: MAX_PAGES)
+    per_page = integer_filter(:per_page, default: 50, max: 200)
     logs = AuditLog.includes(:user, :establishment)
-
-    # Filtros opcionais — action_type validado contra allowlist (5a)
-    if params[:action_type].present? && ALLOWED_ACTION_TYPES.include?(params[:action_type])
-      logs = logs.where(action: params[:action_type])
+    action = string_filter(:action_type, max: 80)
+    if action.present?
+      action = 'password_change' if action == 'password_changed'
+      raise InvalidFilter unless ACTION_LABELS.key?(action)
+      logs = logs.where(action: action == 'password_change' ? %w[password_change password_changed] : action)
     end
-    
-    if params[:user_id].present? && params[:user_id].to_s =~ /\A\d+\z/
-      logs = logs.where(user_id: params[:user_id].to_i)
+    %i[user_id establishment_id].each do |key|
+      id = integer_filter(key, max: 9_223_372_036_854_775_807)
+      logs = logs.where(key => id) if id
     end
-    
-    if params[:establishment_id].present? && params[:establishment_id].to_s =~ /\A\d+\z/
-      logs = logs.where(establishment_id: params[:establishment_id].to_i)
-    end
-
-    # Filtro por data seguro contra Date::Error
-    if (start_d = safe_parse_date(params[:start_date]))
-      logs = logs.where('created_at >= ?', start_d.beginning_of_day)
-    end
-    if (end_d = safe_parse_date(params[:end_date]))
-      logs = logs.where('created_at <= ?', end_d.end_of_day)
-    end
-
-    # Paginação segura contra valores negativos ou zero
-    page = [params[:page].to_i, 1].max
-    per_page = [[(params[:per_page] || 50).to_i, 1].max, 200].min
+    start_date = date_filter(:start_date)
+    end_date = date_filter(:end_date)
+    raise InvalidFilter if start_date && end_date && start_date > end_date
+    logs = logs.where('created_at >= ?', start_date.beginning_of_day) if start_date
+    logs = logs.where('created_at < ?', end_date.next_day.beginning_of_day) if end_date
     total = logs.count
-    logs = logs.order(created_at: :desc).offset((page - 1) * per_page).limit(per_page)
-
     render json: {
-      logs: logs.map { |log| serialize_log(log) },
-      pagination: {
-        current_page: page,
-        per_page: per_page,
-        total_count: total,
-        total_pages: (total.to_f / per_page).ceil
-      }
+      logs: logs.order(created_at: :desc, id: :desc).offset((page - 1) * per_page).limit(per_page).map { |log| serialize_log(log) },
+      pagination: { current_page: page, per_page: per_page, total_count: total,
+        total_pages: [(total.to_f / per_page).ceil, MAX_PAGES].min, truncated: total > MAX_PAGES * per_page }
     }
   end
 
-  # GET /super_admin/audit_logs/security_summary
-  # Resumo de segurança das últimas 24h (todos os estabelecimentos)
   def security_summary
-    # Cache de 2 minutos para evitar sobrecarga do banco com múltiplas
-    # queries de agregação a cada requisição (5c — rate limiting / cache)
-    result = Rails.cache.fetch('super_admin/security_summary', expires_in: 2.minutes) do
-      since = 24.hours.ago
-
-      # Logins nas últimas 24h
-      logins_24h = AuditLog
-        .where(action: 'login', created_at: since..)
-        .count
-
-      # Logins falhos nas últimas 24h
-      failed_logins_24h = AuditLog
-        .where(action: 'login_failed', created_at: since..)
-        .count
-
-      # IPs únicos com falhas
-      suspicious_ips = AuditLog
-        .where(action: 'login_failed', created_at: since..)
-        .distinct
-        .pluck(:ip_address)
-        .compact
-
-      # Últimos 20 logs de segurança
-      recent_logs = AuditLog
-        .where(action: %w[login login_failed logout password_change])
-        .includes(:user, :establishment)
-        .order(created_at: :desc)
-        .limit(20)
-        .map { |log| serialize_log(log) }
-
-      # Estabelecimentos mais ativos
-      active_establishments = AuditLog
-        .where(action: 'login', created_at: since..)
-        .group(:establishment_id)
-        .count
-        .sort_by { |_, count| -count }
-        .first(10)
-        .map { |est_id, count| { establishment_id: est_id, login_count: count } }
-
-      # Usuários mais ativos
-      active_users = AuditLog
-        .where(action: 'login', created_at: since..)
-        .group(:user_id)
-        .count
-        .sort_by { |_, count| -count }
-        .first(10)
-        .map { |user_id, count| { user_id: user_id, login_count: count } }
-
-      {
-        summary: {
-          logins_24h: logins_24h,
-          failed_logins_24h: failed_logins_24h,
-          suspicious_ips: suspicious_ips,
-          suspicious_ip_count: suspicious_ips.length
-        },
-        recent_logs: recent_logs,
-        active_establishments: active_establishments,
-        active_users: active_users
-      }
+    result = Rails.cache.fetch('super_admin/security_summary/v2', expires_in: 2.minutes) do
+      now = Time.current
+      recent = AuditLog.where(created_at: (now - 24.hours)..now)
+      failures = recent.where(action: 'login_failed')
+      { generated_at: now.iso8601, summary: {
+        logins_24h: recent.where(action: 'login').count, failed_logins_24h: failures.count,
+        suspicious_ip_count: failures.where.not(ip_address: [nil, '']).distinct.count(:ip_address)
+      } }
     end
-
     render json: result
+  end
+
+  def filter_options
+    query = string_filter(:q, max: 100)
+    scope = Establishment.all
+    scope = scope.where('name ILIKE ?', "%#{Establishment.sanitize_sql_like(query)}%") if query.present?
+    rows = scope.order(:name, :id).limit(51).pluck(:id, :name)
+    render json: { establishments: rows.first(50).map { |id, name| { id: id, name: name } },
+      has_more: rows.length > 50, actions: ACTION_LABELS.map { |value, label| { value: value, label: label } } }
   end
 
   private
 
-  def safe_parse_date(date_str)
-    return nil if date_str.blank?
-    Date.parse(date_str.to_s)
-  rescue Date::Error, ArgumentError
-    nil
+  def string_filter(key, max:)
+    value = params[key]
+    return nil if value.nil?
+    raise InvalidFilter unless value.is_a?(String) && value.length <= max
+    value.presence
+  end
+
+  def integer_filter(key, max:, default: nil)
+    value = params[key]
+    return default if value.nil? || value == ''
+    raise InvalidFilter unless (value.is_a?(String) || value.is_a?(Integer)) && value.to_s.match?(/\A[0-9]{1,19}\z/)
+    number = value.to_i
+    raise InvalidFilter unless number.between?(1, max)
+    number
+  end
+
+  def date_filter(key)
+    value = string_filter(key, max: 10)
+    return nil unless value
+    raise InvalidFilter unless value.match?(/\A[0-9]{4}-[0-9]{2}-[0-9]{2}\z/)
+    date = Date.iso8601(value)
+    raise InvalidFilter unless date.year.between?(1, 9998)
+    date
+  rescue Date::Error
+    raise InvalidFilter
+  end
+
+  def safe_text(value, max = 120)
+    value.is_a?(String) ? value.gsub(/[[:cntrl:]]/, '').truncate(max) : nil
   end
 
   def serialize_log(log)
-    safe_details = (log.details || {}).except(*SENSITIVE_DETAILS_KEYS)
-
-    {
-      id: log.id,
-      action: log.action,
-      ip_address: log.ip_address,
-      # user_agent raw removido da resposta (5b) — informação sensível condensada
-      # em 'device' (ex: "Windows · Chrome") é suficiente para o painel
-      device: log.details&.dig('device'),
-      location: log.details&.dig('location'),
-      email_attempted: log.details&.dig('email_attempted'),
-      reason: log.details&.dig('reason'),
+    details = log.details.is_a?(Hash) ? log.details : {}
+    location = details['location']
+    { id: log.id, action: safe_text(log.action, 80), ip_address: safe_text(log.ip_address, 45),
+      device: safe_text(details['device']),
+      location: location.is_a?(Hash) ? %w[city region country].to_h { |key| [key, safe_text(location[key])] } : nil,
       timestamp: log.created_at.iso8601,
-      user: log.user ? {
-        id: log.user.id,
-        name: log.user.name,
-        email: log.user.email
-      } : nil,
-      establishment: log.establishment ? {
-        id: log.establishment.id,
-        name: log.establishment.name,
-        slug: log.establishment.slug
-      } : nil,
-      details: safe_details
-    }
+      user: log.user ? { id: log.user.id, name: safe_text(log.user.name), email: safe_text(log.user.email, 254) } : nil,
+      establishment: log.establishment ? { id: log.establishment.id, name: safe_text(log.establishment.name), slug: safe_text(log.establishment.slug) } : nil }
   end
 end
