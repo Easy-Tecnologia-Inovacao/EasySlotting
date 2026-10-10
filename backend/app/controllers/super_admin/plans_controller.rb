@@ -2,7 +2,7 @@ module SuperAdmin
   class PlansController < ApplicationController
     before_action :authenticate_user!
     before_action :require_super_admin!
-    before_action :set_plan, only: [:update]
+    before_action :set_plan, only: [:update, :destroy]
 
     rescue_from ActiveRecord::RecordNotUnique, with: :render_plan_conflict
 
@@ -55,6 +55,24 @@ module SuperAdmin
       else
         render json: { error: @plan.errors.full_messages.to_sentence }, status: :unprocessable_entity
       end
+    end
+
+    def destroy
+      Plan.transaction(requires_new: true) { @plan.destroy! }
+      AuditLogger.log(
+        action: 'super_admin_delete_plan',
+        user: current_user,
+        ip: request.remote_ip,
+        user_agent: request.user_agent,
+        auditable: @plan,
+        details: { plan_id: @plan.id, plan_code: @plan.code, name: @plan.name }
+      )
+      head :no_content
+    rescue ActiveRecord::DeleteRestrictionError, ActiveRecord::InvalidForeignKey
+      render json: {
+        code: 'PLAN_HAS_SUBSCRIPTIONS',
+        error: 'Este plano possui assinaturas vinculadas e não pode ser excluído. Edite o plano e desative a opção Plano ativo para retirá-lo de novas contratações, preservando o histórico.'
+      }, status: :conflict
     end
 
     private

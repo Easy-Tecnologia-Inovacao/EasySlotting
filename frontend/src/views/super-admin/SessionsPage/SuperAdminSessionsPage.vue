@@ -1,6 +1,6 @@
 <template>
   <SuperAdminLayout>
-    <StaffSessionsPanel contained>
+    <StaffSessionsPanel contained class="super-admin-sessions">
       <template #header="{ refresh, disabled }">
         <SuperAdminPageHeader
           eyebrow="Controle de acessos"
@@ -23,3 +23,10 @@ import SuperAdminLayout from '@/views/super-admin/Layout/SuperAdminLayout.vue'
 import StaffSessionsPanel from '@/components/StaffSessionsPanel.vue'
 import SuperAdminPageHeader from '@/components/super-admin/SuperAdminPageHeader.vue'
 </script>
+
+<style scoped>
+.super-admin-sessions :deep(.sessions-card) {
+  background: var(--bs-body-bg);
+  box-shadow: none !important;
+}
+</style>

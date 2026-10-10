@@ -14,7 +14,7 @@
             </p>
           </div>
           <div class="col-12 col-xl-4 text-xl-end">
-            <button class="btn btn-primary rounded-3 fw-semibold px-4 py-2 shadow-sm" :disabled="loading || saving || catalogFull" @click="openCreateModal">
+            <button class="btn btn-primary rounded-3 fw-semibold px-4 py-2 shadow-sm" :disabled="loading || saving || deletingPlanId !== null || catalogFull" @click="openCreateModal">
               <i class="bi bi-plus-lg me-2"></i>
               Novo plano
             </button>
@@ -36,7 +36,7 @@
         <p class="mt-3 text-secondary mb-0">Carregando planos...</p>
       </div>
 
-      <div v-else class="card border-0 shadow-sm rounded-4">
+      <div v-else class="card plans-table-card">
         <div class="card-body p-0">
           <div class="table-responsive">
             <table class="table align-middle mb-0">
@@ -93,12 +93,25 @@
                   </td>
 
                   <td class="text-end pe-4">
-                    <button
-                      class="btn btn-sm btn-outline-primary rounded-3"
-                      @click="openEditModal(plan)"
-                    >
-                      Editar
-                    </button>
+                    <div class="d-flex justify-content-end gap-2">
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-primary rounded-3"
+                        :disabled="saving || deletingPlanId !== null"
+                        @click="openEditModal(plan)"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-danger rounded-3"
+                        :disabled="saving || deletingPlanId !== null"
+                        :aria-label="`Excluir plano ${plan.name}`"
+                        @click="deletePlan(plan)"
+                      >
+                        {{ deletingPlanId === plan.id ? 'Excluindo...' : 'Excluir' }}
+                      </button>
+                    </div>
                   </td>
                 </tr>
 
@@ -113,7 +126,11 @@
         </div>
       </div>
 
-      <div v-if="errorMessage" class="alert alert-danger rounded-4 mt-4 shadow-sm">
+      <div v-if="successMessage" class="alert alert-success rounded-4 mt-4 shadow-sm" role="status">
+        {{ successMessage }}
+      </div>
+
+      <div v-if="errorMessage" class="alert alert-danger rounded-4 mt-4 shadow-sm" role="alert">
         {{ errorMessage }}
       </div>
     </div>
@@ -532,6 +549,8 @@ import SuperAdminLayout from '@/views/super-admin/Layout/SuperAdminLayout.vue'
 const plans = ref([])
 const loading = ref(true)
 const saving = ref(false)
+const deletingPlanId = ref(null)
+const successMessage = ref('')
 const showModal = ref(false)
 const editingPlanId = ref(null)
 const errorMessage = ref('')
@@ -586,7 +605,8 @@ const loadPlans = async () => {
 }
 
 const openCreateModal = () => {
-  if (loading.value || saving.value || catalogFull.value) return
+  if (loading.value || saving.value || deletingPlanId.value !== null || catalogFull.value) return
+  successMessage.value = ''
   editingPlanId.value = null
   form.value = getEmptyForm()
   form.value.max_owner_sessions = Math.min(highestActiveSessionLimit.value + 1, 4)
@@ -596,6 +616,8 @@ const openCreateModal = () => {
 }
 
 const openEditModal = (plan) => {
+  if (saving.value || deletingPlanId.value !== null) return
+  successMessage.value = ''
   errorMessage.value = ''
   validationErrors.value = []
   editingPlanId.value = plan.id
@@ -618,6 +640,27 @@ const openEditModal = (plan) => {
     promotion_duration_days: plan.promotion_duration_days ?? ''
   }
   showModal.value = true
+}
+
+const deletePlan = async (plan) => {
+  if (loading.value || saving.value || deletingPlanId.value !== null || showModal.value) return
+  if (!window.confirm(`Excluir o plano "${plan.name}"? Esta ação não pode ser desfeita. Planos com assinaturas vinculadas não podem ser excluídos.`)) return
+
+  deletingPlanId.value = plan.id
+  errorMessage.value = ''
+  successMessage.value = ''
+  try {
+    await api.delete(`/super_admin/plans/${encodeURIComponent(plan.id)}`)
+    plans.value = plans.value.filter(item => item.id !== plan.id)
+    successMessage.value = 'Plano excluído com sucesso.'
+  } catch (error) {
+    const serverMsg = error?.response?.data?.error
+    errorMessage.value = typeof serverMsg === 'string' && serverMsg.length < 300
+      ? serverMsg
+      : 'Não foi possível excluir o plano. Atualize a lista e tente novamente.'
+  } finally {
+    deletingPlanId.value = null
+  }
 }
 
 const closeModal = () => {
@@ -689,7 +732,7 @@ const validateForm = () => {
 }
 
 const savePlan = async () => {
-  if (saving.value) return
+  if (saving.value || deletingPlanId.value !== null) return
   errorMessage.value = ''
   validationErrors.value = []
 
@@ -799,6 +842,18 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.plans-table-card {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 24px;
+  overflow: hidden;
+  background-color: var(--bs-body-bg);
+}
+
+.plans-table-card .table {
+  --bs-table-bg: var(--bs-body-bg);
+  --bs-table-border-color: var(--bs-border-color);
+}
+
 .table th {
   font-size: 0.85rem;
   font-weight: 700;
@@ -808,6 +863,10 @@ onMounted(() => {
 
 .table td {
   vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 /* ── Hero Card (Painel em gradiente) ── */

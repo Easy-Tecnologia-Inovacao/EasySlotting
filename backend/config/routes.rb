@@ -202,7 +202,7 @@ Rails.application.routes.draw do
     # =========================
     namespace :super_admin do
       get '/dashboard', to: 'dashboard#index'
-      resources :plans, only: [:index, :create, :update]
+      resources :plans, only: [:index, :create, :update, :destroy]
 
       # Audit Logs - Visualização de logs de segurança
       resources :audit_logs, only: [:index] do

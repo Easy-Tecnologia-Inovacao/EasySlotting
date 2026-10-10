@@ -6,6 +6,8 @@ Atualização: cada **funcionário vinculado ativamente** herda a mesma quota do
 
 ## Configuração e uso
 
+Para retirar ofertas, consulte [exclusão e inativação de planos](plan-deletion.md). Planos com assinaturas vinculadas são preservados.
+
 No painel super admin, em **Planos → criar/editar → Aparelhos simultâneos por conta da equipe**, selecione de **1 a 4**. O campo `Plan.max_owner_sessions` mantém o identificador técnico por compatibilidade, é obrigatório e tem default 1/restrição equivalente no PostgreSQL. Cada limite só pode pertencer a **um plano ativo**. A soma dos números do catálogo não calcula sessões.
 
 Exemplos comerciais possíveis, sem criar novos preços automaticamente:
